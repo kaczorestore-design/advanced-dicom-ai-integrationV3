@@ -7,8 +7,8 @@ declare module 'cornerstone-core' {
     intercept: number;
     windowCenter: number;
     windowWidth: number;
-    render: any;
-    getPixelData: () => any;
+    render: (enabledElement: EnabledElement, invalidated: boolean) => void;
+    getPixelData: () => Uint8Array | Uint16Array | Int16Array | Float32Array;
     rows: number;
     columns: number;
     height: number;
@@ -65,21 +65,21 @@ declare module 'cornerstone-tools' {
   export const StackScrollMouseWheelTool: Tool;
 
   export const external: {
-    cornerstone: any;
-    Hammer: any;
-    cornerstoneMath: any;
+    cornerstone: typeof import('cornerstone-core');
+    Hammer: typeof import('hammerjs');
+    cornerstoneMath: typeof import('cornerstone-math');
   };
 
   export function init(): void;
   export function addTool(tool: Tool): void;
-  export function setToolActive(toolName: string, options?: any): void;
+  export function setToolActive(toolName: string, options?: Record<string, unknown>): void;
   export function setToolPassive(toolName: string): void;
 }
 
 declare module 'cornerstone-wado-image-loader' {
   export const external: {
-    cornerstone: any;
-    dicomParser: any;
+    cornerstone: typeof import('cornerstone-core');
+    dicomParser: typeof import('dicom-parser');
   };
 }
 
@@ -87,8 +87,8 @@ export {};
 
 declare global {
   interface Window {
-    dicomParser: any;
-    Hammer: any;
-    cornerstoneMath: any;
+    dicomParser: typeof import('dicom-parser');
+    Hammer: typeof import('hammerjs');
+    cornerstoneMath: typeof import('cornerstone-math');
   }
 }

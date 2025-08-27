@@ -17,7 +17,8 @@ const glslPlugin = () => {
         try {
           const content = fs.readFileSync(id, 'utf-8')
           return `export default ${JSON.stringify(content)};`
-        } catch (e) {
+        } catch {
+          // Ignore file read errors
           return `export default '';`
         }
       }

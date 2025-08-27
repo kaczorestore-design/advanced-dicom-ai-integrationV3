@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -41,7 +41,7 @@ export default function DoctorDashboard() {
 
   const API_URL = 'http://localhost:8000'
 
-  const fetchStudies = async () => {
+  const fetchStudies = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/studies/`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -56,7 +56,7 @@ export default function DoctorDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
 
   // Use the standardized refresh hook
   const { isRefreshing, lastRefreshed, refresh } = useRefresh(
@@ -76,7 +76,7 @@ export default function DoctorDashboard() {
     
     // Cleanup interval on component unmount
     return () => clearInterval(refreshInterval)
-  }, [])
+  }, [fetchStudies])
 
   const assignedStudies = studies.filter(s => s.status === 'assigned' || s.status === 'in_progress')
   

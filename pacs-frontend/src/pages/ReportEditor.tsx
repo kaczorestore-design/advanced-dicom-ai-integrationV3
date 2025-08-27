@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -52,9 +52,9 @@ const ReportEditor: React.FC = () => {
 
   useEffect(() => {
     fetchStudy()
-  }, [studyId])
+  }, [studyId, fetchStudy])
 
-  const fetchStudy = async () => {
+  const fetchStudy = useCallback(async () => {
     try {
       console.log('Fetching study with token:', token ? 'Token present' : 'No token')
       const response = await fetch(`${API_URL}/studies/${studyId}`, {
@@ -106,7 +106,7 @@ const ReportEditor: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [studyId, token])
 
   const saveReport = async () => {
     setSaving(true)

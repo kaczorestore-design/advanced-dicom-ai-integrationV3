@@ -288,20 +288,20 @@ export default function DicomViewer() {
     if (isInitialized && imageIds && imageIds.length > 0 && viewMode === '2d') {
       loadImage(currentImageIndex);
     }
-  }, [isInitialized, imageIds, currentImageIndex, viewMode]);
+  }, [isInitialized, imageIds, currentImageIndex, viewMode, loadImage]);
 
   useEffect(() => {
     if (isInitialized && imageIds && imageIds.length > 0 && viewMode === '2d') {
       console.log('✅ Cornerstone initialized, loading images:', imageIds);
       loadImage(0);
     }
-  }, [isInitialized, imageIds, viewMode]);
+  }, [isInitialized, imageIds, viewMode, loadImage]);
 
   useEffect(() => {
     if (isInitialized && imageIds && imageIds.length > 0 && cornerstoneElementRef.current && viewMode === '2d') {
       loadImage(currentImageIndex);
     }
-  }, [isInitialized, imageIds, currentImageIndex, viewMode]);
+  }, [isInitialized, imageIds, currentImageIndex, viewMode, loadImage]);
 
   // Set up image stack for mouse wheel scrolling
   useEffect(() => {
@@ -1804,13 +1804,23 @@ endsolid DICOM_3D_Model`;
               } gap-1`}>
                 {/* Primary Viewport */}
                 <div 
-                  ref={cornerstoneElementRef}
-                  className="w-full h-full bg-black border border-blue-500/30"
-                  style={{ 
-                    minHeight: layout === '1x1' ? '300px' : '150px',
-                    aspectRatio: 'auto'
-                  }}
-                ></div>
+                  className={`dicom-viewport ${
+                    layout === '1x1' ? 'layout-1x1' : 'layout-multi'
+                  } ${
+                    loading ? 'loading' : ''
+                  } ${
+                    error ? 'error' : ''
+                  } active`}
+                >
+                  <div 
+                    ref={cornerstoneElementRef}
+                    className="w-full h-full"
+                    style={{ 
+                      minHeight: layout === '1x1' ? '400px' : '200px',
+                      maxHeight: '100%'
+                    }}
+                  ></div>
+                </div>
                 
                 {/* Additional Viewports for multi-layout */}
                 {layout !== '1x1' && Array.from({ length: 
@@ -1821,11 +1831,7 @@ endsolid DICOM_3D_Model`;
                 }).map((_, index) => (
                   <div 
                     key={`viewport-${index + 1}`}
-                    className="w-full h-full bg-black border border-gray-500/30 flex items-center justify-center"
-                    style={{ 
-                      minHeight: '150px',
-                      aspectRatio: 'auto'
-                    }}
+                    className="dicom-viewport layout-multi"
                   >
                     <div className={`text-center ${
                       theme === 'dark' ? 'text-gray-400' : 'text-gray-600'

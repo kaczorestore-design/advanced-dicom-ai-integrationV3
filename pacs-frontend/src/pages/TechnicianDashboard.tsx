@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -78,9 +78,9 @@ export default function TechnicianDashboard() {
     
     // Cleanup interval on component unmount
     return () => clearInterval(refreshInterval)
-  }, [])
+  }, [fetchStudies])
 
-  const fetchStudies = async () => {
+  const fetchStudies = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/studies/`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -95,7 +95,7 @@ export default function TechnicianDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
 
   const stats = {
     totalStudies: studies.length,

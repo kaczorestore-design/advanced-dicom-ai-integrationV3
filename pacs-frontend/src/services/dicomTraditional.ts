@@ -1,4 +1,33 @@
-import { DICOMwebService, DICOMwebConfig } from './dicomweb';
+import { DICOMwebService, DICOMwebConfig, DICOMStudy, DICOMSeries, DICOMInstance } from './dicomweb';
+
+export interface DIMSECommand {
+  commandType: 'C-FIND' | 'C-MOVE' | 'C-GET' | 'C-STORE' | 'C-ECHO';
+  dataset?: Record<string, unknown>;
+  studyInstanceUID?: string;
+  seriesInstanceUID?: string;
+  sopInstanceUID?: string;
+  destinationAET?: string;
+}
+
+export interface DIMSEResponse {
+  status: number;
+  dataset?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface MoveResponse {
+  status: 'pending' | 'success' | 'failed';
+  numberOfCompletedSubOperations?: number;
+  numberOfRemainingSubOperations?: number;
+  numberOfFailedSubOperations?: number;
+  numberOfWarningSubOperations?: number;
+}
+
+export interface StoreResponse {
+  status: 'success' | 'failed';
+  sopInstanceUID: string;
+  error?: string;
+}
 
 export interface DIMSEConfig {
   websocketUrl: string;
@@ -65,7 +94,7 @@ export class DIMSEService {
     });
   }
 
-  private async sendDIMSECommand(command: any): Promise<any> {
+  private async sendDIMSECommand(command: DIMSECommand): Promise<DIMSEResponse> {
     if (!this.wsConnection || this.wsConnection.readyState !== WebSocket.OPEN) {
       await this.connectWebSocket();
     }
@@ -99,7 +128,7 @@ export class DIMSEService {
     });
   }
 
-  async cFind(criteria: StudySearchCriteria): Promise<any[]> {
+  async cFind(criteria: StudySearchCriteria): Promise<DICOMStudy[]> {
     const command = {
       type: 'C-FIND',
       level: 'STUDY',
@@ -118,7 +147,7 @@ export class DIMSEService {
     return this.sendDIMSECommand(command);
   }
 
-  async cFindSeries(criteria: SeriesSearchCriteria): Promise<any[]> {
+  async cFindSeries(criteria: SeriesSearchCriteria): Promise<DICOMSeries[]> {
     const command = {
       type: 'C-FIND',
       level: 'SERIES',
@@ -134,7 +163,7 @@ export class DIMSEService {
     return this.sendDIMSECommand(command);
   }
 
-  async cFindInstances(criteria: InstanceSearchCriteria): Promise<any[]> {
+  async cFindInstances(criteria: InstanceSearchCriteria): Promise<DICOMInstance[]> {
     const command = {
       type: 'C-FIND',
       level: 'IMAGE',
@@ -154,7 +183,7 @@ export class DIMSEService {
     seriesInstanceUID?: string,
     sopInstanceUID?: string,
     destinationAET?: string
-  ): Promise<any> {
+  ): Promise<MoveResponse> {
     const command = {
       type: 'C-MOVE',
       destinationAET: destinationAET || this.config.callingAET,
@@ -172,7 +201,7 @@ export class DIMSEService {
     studyInstanceUID: string,
     seriesInstanceUID?: string,
     sopInstanceUID?: string
-  ): Promise<any> {
+  ): Promise<DICOMInstance[]> {
     const command = {
       type: 'C-GET',
       criteria: {
@@ -185,7 +214,7 @@ export class DIMSEService {
     return this.sendDIMSECommand(command);
   }
 
-  async cStore(dicomData: ArrayBuffer, sopInstanceUID: string): Promise<any> {
+  async cStore(dicomData: ArrayBuffer, sopInstanceUID: string): Promise<StoreResponse> {
     const command = {
       type: 'C-STORE',
       sopInstanceUID,
@@ -233,7 +262,7 @@ export class DICOMNetworkService {
     }
   }
 
-  async searchStudies(criteria: StudySearchCriteria, useDIMSE = false): Promise<any[]> {
+  async searchStudies(criteria: StudySearchCriteria, useDIMSE = false): Promise<DICOMStudy[]> {
     if (useDIMSE && this.dimseService) {
       return this.dimseService.cFind(criteria);
     } else if (this.dicomwebService) {
@@ -251,7 +280,7 @@ export class DICOMNetworkService {
     studyInstanceUID: string,
     useDIMSE = false,
     destinationAET?: string
-  ): Promise<any> {
+  ): Promise<MoveResponse | DICOMInstance[]> {
     if (useDIMSE && this.dimseService) {
       if (destinationAET) {
         return this.dimseService.cMove(studyInstanceUID, undefined, undefined, destinationAET);
@@ -276,7 +305,7 @@ export class DICOMNetworkService {
     }
   }
 
-  async storeStudy(dicomFiles: File[], useDIMSE = false): Promise<any> {
+  async storeStudy(dicomFiles: File[], useDIMSE = false): Promise<StoreResponse | import('./dicomweb').StoreResponse> {
     if (useDIMSE && this.dimseService) {
       const results = [];
       for (const file of dicomFiles) {
@@ -300,7 +329,7 @@ export class DICOMNetworkService {
       try {
         await this.dicomwebService.searchStudies({ limit: 1 });
         return true;
-      } catch (error) {
+      } catch {
         return false;
       }
     } else {

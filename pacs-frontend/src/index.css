@@ -163,5 +163,143 @@
   .animate-cardiac-spin {
     animation: cardiac-spin 2s linear infinite;
   }
+  
+  /* DICOM Canvas Styling for Professional Image Display */
+  .cornerstone-canvas,
+  .dicom-viewport canvas,
+  canvas[data-cornerstone] {
+    /* Responsive sizing with proper aspect ratio maintenance */
+    max-width: 100%;
+    max-height: 100%;
+    width: auto !important;
+    height: auto !important;
+    
+    /* Prevent image cropping and maintain quality */
+    object-fit: contain;
+    object-position: center;
+    
+    /* Smooth scaling and high-quality rendering */
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    
+    /* Professional appearance */
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    
+    /* Ensure canvas takes available space efficiently */
+    display: block;
+    margin: 0 auto;
+    
+    /* Prevent unwanted interactions during loading */
+    pointer-events: auto;
+    user-select: none;
+    
+    /* Smooth transitions for viewport changes */
+    transition: all 0.2s ease-in-out;
+  }
+  
+  /* Container styling for DICOM viewports */
+  .dicom-viewport {
+    /* Flexible container that maintains aspect ratio */
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    
+    /* Center content */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    
+    /* Professional background */
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    border-radius: 8px;
+    overflow: hidden;
+    
+    /* Subtle border for definition */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Responsive canvas sizing for different layouts */
+  .dicom-viewport.layout-1x1 .cornerstone-canvas {
+    max-height: calc(100vh - 200px);
+    min-height: 400px;
+  }
+  
+  .dicom-viewport.layout-multi .cornerstone-canvas {
+    max-height: calc(50vh - 100px);
+    min-height: 200px;
+  }
+  
+  /* High DPI display optimization */
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .cornerstone-canvas {
+      image-rendering: -webkit-optimize-contrast;
+    }
+  }
+  
+  /* Mobile responsiveness */
+  @media (max-width: 768px) {
+    .dicom-viewport {
+      min-height: 250px;
+    }
+    
+    .dicom-viewport.layout-1x1 .cornerstone-canvas {
+      max-height: calc(100vh - 300px);
+      min-height: 250px;
+    }
+    
+    .dicom-viewport.layout-multi .cornerstone-canvas {
+      max-height: calc(40vh - 80px);
+      min-height: 150px;
+    }
+  }
+  
+  /* Tablet responsiveness */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .dicom-viewport.layout-1x1 .cornerstone-canvas {
+      max-height: calc(100vh - 250px);
+      min-height: 350px;
+    }
+  }
+  
+  /* Large screen optimization */
+  @media (min-width: 1920px) {
+    .dicom-viewport.layout-1x1 .cornerstone-canvas {
+      max-height: calc(100vh - 180px);
+      min-height: 500px;
+    }
+  }
+  
+  /* Loading state styling */
+  .dicom-viewport.loading {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%);
+    background-size: 200% 200%;
+    animation: loading-gradient 2s ease-in-out infinite;
+  }
+  
+  @keyframes loading-gradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  
+  /* Error state styling */
+  .dicom-viewport.error {
+    background: linear-gradient(135deg, #2d1a1a 0%, #3d2d2d 100%);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+  
+  /* Focus and interaction states */
+  .dicom-viewport:hover {
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
+  }
+  
+  .dicom-viewport.active {
+    border-color: rgba(59, 130, 246, 0.8);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  }
 }
 

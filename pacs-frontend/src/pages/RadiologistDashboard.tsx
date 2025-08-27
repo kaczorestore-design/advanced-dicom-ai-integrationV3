@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -81,7 +81,7 @@ export default function RadiologistDashboard() {
     
     // Cleanup interval on component unmount
     return () => clearInterval(refreshInterval)
-  }, [])
+  }, [fetchStudies, fetchPendingStudies])
 
   // Initialize profile data and preferences from user context
   useEffect(() => {
@@ -98,7 +98,7 @@ export default function RadiologistDashboard() {
     }
   }, [user])
 
-  const fetchStudies = async () => {
+  const fetchStudies = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/studies/`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -112,9 +112,9 @@ export default function RadiologistDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token, user?.id])
 
-  const fetchPendingStudies = async () => {
+  const fetchPendingStudies = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/studies/pending`, {
         headers: {
@@ -128,7 +128,7 @@ export default function RadiologistDashboard() {
     } catch (error) {
       console.error('Error fetching pending studies:', error)
     }
-  }
+  }, [token])
 
   // Use the standardized refresh hook
   const { isRefreshing, lastRefreshed, refresh } = useRefresh(
@@ -152,7 +152,7 @@ export default function RadiologistDashboard() {
     
     // Cleanup interval on component unmount
     return () => clearInterval(refreshInterval)
-  }, [])
+  }, [fetchStudies, fetchPendingStudies])
 
 
 

@@ -25,11 +25,24 @@ declare module 'cornerstone-math' {
     distanceToPoint: (start: Point2, end: Point2, point: Point2) => number;
   };
   
+  export interface Rect {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }
+  
+  export interface Ellipse {
+    center: Point2;
+    width: number;
+    height: number;
+  }
+  
   export const rect: {
-    getCorners: (rect: any) => Point2[];
+    getCorners: (rect: Rect) => Point2[];
   };
   
   export const ellipse: {
-    pointInEllipse: (ellipse: any, point: Point2) => boolean;
+    pointInEllipse: (ellipse: Ellipse, point: Point2) => boolean;
   };
 }

@@ -1,14 +1,14 @@
 declare module 'cornerstone-core' {
-  const cornerstone: any;
+  const cornerstone: typeof import('./cornerstone');
   export = cornerstone;
 }
 
 declare module 'cornerstone-tools' {
-  const cornerstoneTools: any;
+  const cornerstoneTools: typeof import('./cornerstone');
   export = cornerstoneTools;
 }
 
 declare module 'cornerstone-wado-image-loader' {
-  const cornerstoneWADOImageLoader: any;
+  const cornerstoneWADOImageLoader: Record<string, unknown>;
   export = cornerstoneWADOImageLoader;
 }

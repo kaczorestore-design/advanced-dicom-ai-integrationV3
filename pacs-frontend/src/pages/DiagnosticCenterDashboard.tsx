@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -25,7 +25,7 @@ export default function DiagnosticCenterDashboard() {
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-  const fetchCenterUsers = async () => {
+  const fetchCenterUsers = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/diagnostic-center/users`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -40,7 +40,7 @@ export default function DiagnosticCenterDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, token])
 
   // Use the standardized refresh hook
   const { isRefreshing, lastRefreshed, refresh } = useRefresh(
@@ -52,7 +52,7 @@ export default function DiagnosticCenterDashboard() {
 
   useEffect(() => {
     fetchCenterUsers()
-  }, [])
+  }, [fetchCenterUsers])
 
   const stats = {
     totalUsers: centerUsers.length,

@@ -5,6 +5,56 @@ export interface DICOMwebConfig {
   authToken?: string;
 }
 
+export interface DICOMStudy {
+  StudyInstanceUID: string;
+  PatientID?: string;
+  PatientName?: string;
+  StudyDate?: string;
+  StudyTime?: string;
+  StudyDescription?: string;
+  Modality?: string;
+  [key: string]: unknown;
+}
+
+export interface DICOMSeries {
+  SeriesInstanceUID: string;
+  StudyInstanceUID: string;
+  SeriesNumber?: string;
+  SeriesDescription?: string;
+  Modality?: string;
+  NumberOfSeriesRelatedInstances?: number;
+  [key: string]: unknown;
+}
+
+export interface DICOMInstance {
+  SOPInstanceUID: string;
+  SeriesInstanceUID: string;
+  StudyInstanceUID: string;
+  InstanceNumber?: string;
+  SOPClassUID?: string;
+  [key: string]: unknown;
+}
+
+export interface DICOMMetadata {
+  [tag: string]: {
+    vr: string;
+    Value?: unknown[];
+    BulkDataURI?: string;
+  };
+}
+
+export interface StoreResponse {
+  ReferencedSOPSequence?: Array<{
+    ReferencedSOPClassUID: string;
+    ReferencedSOPInstanceUID: string;
+  }>;
+  FailedSOPSequence?: Array<{
+    ReferencedSOPClassUID: string;
+    ReferencedSOPInstanceUID: string;
+    FailureReason: number;
+  }>;
+}
+
 export class DICOMwebService {
   public config: DICOMwebConfig;
 
@@ -30,7 +80,7 @@ export class DICOMwebService {
     Modality?: string;
     limit?: number;
     offset?: number;
-  }): Promise<any[]> {
+  }): Promise<DICOMStudy[]> {
     const searchParams = new URLSearchParams();
     
     if (params.PatientID) searchParams.append('00100020', params.PatientID);
@@ -56,7 +106,7 @@ export class DICOMwebService {
   async searchSeries(studyInstanceUID: string, params?: {
     Modality?: string;
     SeriesDescription?: string;
-  }): Promise<any[]> {
+  }): Promise<DICOMSeries[]> {
     const searchParams = new URLSearchParams();
     
     if (params?.Modality) searchParams.append('00080060', params.Modality);
@@ -76,7 +126,7 @@ export class DICOMwebService {
     return response.json();
   }
 
-  async searchInstances(studyInstanceUID: string, seriesInstanceUID: string): Promise<any[]> {
+  async searchInstances(studyInstanceUID: string, seriesInstanceUID: string): Promise<DICOMInstance[]> {
     const url = `${this.config.qidoRsUrl}/studies/${studyInstanceUID}/series/${seriesInstanceUID}/instances`;
     
     const response = await fetch(url, {
@@ -97,7 +147,7 @@ export class DICOMwebService {
     sopInstanceUID: string,
     transferSyntax?: string
   ): Promise<ArrayBuffer> {
-    let url = `${this.config.wadoRsUrl}/studies/${studyInstanceUID}/series/${seriesInstanceUID}/instances/${sopInstanceUID}`;
+    const url = `${this.config.wadoRsUrl}/studies/${studyInstanceUID}/series/${seriesInstanceUID}/instances/${sopInstanceUID}`;
     
     const headers: Record<string, string> = { ...this.getHeaders() };
     
@@ -157,7 +207,7 @@ export class DICOMwebService {
     return response.blob();
   }
 
-  async storeInstances(dicomFiles: File[]): Promise<any> {
+  async storeInstances(dicomFiles: File[]): Promise<StoreResponse> {
     const formData = new FormData();
     
     dicomFiles.forEach((file, index) => {
@@ -184,7 +234,7 @@ export class DICOMwebService {
     studyInstanceUID: string,
     seriesInstanceUID?: string,
     sopInstanceUID?: string
-  ): Promise<any[]> {
+  ): Promise<DICOMMetadata[]> {
     let url = `${this.config.wadoRsUrl}/studies/${studyInstanceUID}`;
     
     if (seriesInstanceUID) {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
@@ -114,9 +114,9 @@ export default function AdminDashboard() {
     if (settingsOpen) {
       loadSystemSettings()
     }
-  }, [settingsOpen])
+  }, [settingsOpen, loadSystemSettings])
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [centersRes, usersRes] = await Promise.all([
         fetch(`${API_URL}/admin/diagnostic-centers`, {
@@ -140,9 +140,9 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [API_URL, token, fetchDeletionRequests, fetchStudies])
 
-  const fetchStudies = async () => {
+  const fetchStudies = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/studies/`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -154,9 +154,9 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error fetching studies:', error);
     }
-  };
+  }, [API_URL, token]);
 
-  const fetchDeletionRequests = async () => {
+  const fetchDeletionRequests = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/studies/deletion-requests`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -166,9 +166,9 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error fetching deletion requests:', error);
     }
-  };
+  }, [API_URL, token]);
 
-  const fetchMonitoringData = async () => {
+  const fetchMonitoringData = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/admin/system-monitoring`, {
         headers: {
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error fetching monitoring data:', error);
     }
-  };
+  }, [API_URL, token]);
 
   // Use the standardized refresh hook
   const { isRefreshing, lastRefreshed, refresh } = useRefresh(
@@ -202,7 +202,7 @@ export default function AdminDashboard() {
     
     // Cleanup interval on component unmount
     return () => clearInterval(refreshInterval)
-  }, [])
+  }, [fetchData, fetchMonitoringData])
 
   const stats = {
     totalCenters: centers.length,
@@ -328,7 +328,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadSystemSettings = async () => {
+  const loadSystemSettings = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/admin/system-settings`, {
         headers: {
@@ -343,7 +343,7 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error loading system settings:', error);
     }
-  };
+  }, [API_URL, token]);
 
   const updateSystemSettings = (key: string, value: string | number | boolean) => {
     setSystemSettings(prev => ({

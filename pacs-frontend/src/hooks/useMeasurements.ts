@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Measurement {
@@ -19,7 +19,7 @@ export const useMeasurements = (studyId: number) => {
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [loading, setLoading] = useState(false);
   const { token, user } = useAuth();
-  const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   const saveMeasurement = async (measurement: Omit<Measurement, 'id' | 'createdBy' | 'createdAt'>) => {
     try {
@@ -45,7 +45,7 @@ export const useMeasurements = (studyId: number) => {
     }
   };
 
-  const loadMeasurements = async () => {
+  const loadMeasurements = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/studies/${studyId}/measurements`, {
@@ -61,7 +61,7 @@ export const useMeasurements = (studyId: number) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL, studyId, token]);
 
   const deleteMeasurement = async (measurementId: string) => {
     try {
@@ -82,7 +82,7 @@ export const useMeasurements = (studyId: number) => {
     if (studyId && token) {
       loadMeasurements();
     }
-  }, [studyId, token]);
+  }, [studyId, token, loadMeasurements]);
 
   return {
     measurements,
