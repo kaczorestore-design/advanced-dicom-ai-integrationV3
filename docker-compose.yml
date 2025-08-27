@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: pacs_db
+      POSTGRES_USER: pacs_user
+      POSTGRES_PASSWORD: pacs_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - pacs-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pacs-network
+
+  pacs-backend:
+    build:
+      context: ./pacs-backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://pacs_user:pacs_password@postgres:5432/pacs_db
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=your-secret-key-here
+      - MAX_UPLOAD_SIZE=10737418240  # 10GB in bytes
+    volumes:
+      - dicom_storage:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - pacs-network
+    # Increase memory limits for large file processing
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  pacs-frontend:
+    build:
+      context: ./pacs-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - pacs-backend
+    networks:
+      - pacs-network
+
+  celery-worker:
+    build:
+      context: ./pacs-backend
+      dockerfile: Dockerfile
+    command: celery -A app.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://pacs_user:pacs_password@postgres:5432/pacs_db
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - dicom_storage:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - pacs-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - pacs-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - pacs-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  dicom_storage:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  pacs-network:
+    driver: bridge
