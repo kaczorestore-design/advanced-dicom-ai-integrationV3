@@ -3,9 +3,11 @@ import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
-import { Users, FileText, Activity, Plus, Search, UserPlus, LogOut } from 'lucide-react'
+import { Badge } from '../components/ui/badge'
+import { Users, FileText, Activity, Plus, Search, UserPlus, LogOut, Eye, FileCheck } from 'lucide-react'
 import { useRefresh } from '../hooks/useRefresh'
 import { RefreshButton } from '../components/RefreshButton'
+import { useNavigate } from 'react-router-dom'
 
 interface User {
   id: number
@@ -17,9 +19,28 @@ interface User {
   created_at: string
 }
 
+interface Study {
+  id: number
+  patient: {
+    first_name: string
+    last_name: string
+    patient_id: string
+  }
+  modality: string
+  body_part: string
+  study_description: string
+  study_date: string
+  status: string
+  ai_report?: string
+  radiologist_report?: string
+  created_at: string
+}
+
 export default function DiagnosticCenterDashboard() {
   const { user, token, logout } = useAuth()
+  const navigate = useNavigate()
   const [centerUsers, setCenterUsers] = useState<User[]>([])
+  const [studies, setStudies] = useState<Study[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
 
@@ -37,6 +58,21 @@ export default function DiagnosticCenterDashboard() {
       }
     } catch (error) {
       console.error('Error fetching center users:', error)
+    }
+  }, [API_URL, token])
+
+  const fetchStudies = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/studies/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStudies(data)
+      }
+    } catch (error) {
+      console.error('Error fetching studies:', error)
     } finally {
       setLoading(false)
     }
@@ -44,7 +80,7 @@ export default function DiagnosticCenterDashboard() {
 
   // Use the standardized refresh hook
   const { isRefreshing, lastRefreshed, refresh } = useRefresh(
-    [fetchCenterUsers],
+    [fetchCenterUsers, fetchStudies],
     {
       showFeedback: false // DiagnosticCenterDashboard handles its own feedback
     }
@@ -52,13 +88,16 @@ export default function DiagnosticCenterDashboard() {
 
   useEffect(() => {
     fetchCenterUsers()
-  }, [fetchCenterUsers])
+    fetchStudies()
+  }, [fetchCenterUsers, fetchStudies])
 
   const stats = {
     totalUsers: centerUsers.length,
     activeUsers: centerUsers.filter(u => u.is_active).length,
     doctors: centerUsers.filter(u => u.role === 'doctor').length,
     technicians: centerUsers.filter(u => u.role === 'technician').length,
+    totalStudies: studies.length,
+    completedReports: studies.filter(s => s.radiologist_report || s.status === 'completed').length,
   }
 
   if (loading) {
@@ -202,9 +241,24 @@ export default function DiagnosticCenterDashboard() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <div className="text-3xl font-bold text-gray-900">0</div>
+                  <div className="text-3xl font-bold text-gray-900">{stats.totalStudies}</div>
                   <p className="text-sm text-gray-600">
-                    This month
+                    Total studies
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="medical-card hover:scale-105 transition-transform duration-200">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                  <CardTitle className="text-sm font-semibold text-gray-700">Completed Reports</CardTitle>
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <FileCheck className="h-5 w-5 text-blue-600" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="text-3xl font-bold text-gray-900">{stats.completedReports}</div>
+                  <p className="text-sm text-gray-600">
+                    Reports available
                   </p>
                 </CardContent>
               </Card>
@@ -368,26 +422,112 @@ export default function DiagnosticCenterDashboard() {
         {activeTab === 'studies' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Studies</h2>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Upload Study
-              </Button>
+              <h2 className="text-xl font-semibold">Center Studies</h2>
+              <div className="flex space-x-2">
+                <Badge variant="outline">{studies.length} Total</Badge>
+                <Badge variant="default">{stats.completedReports} Completed</Badge>
+              </div>
             </div>
 
             <Card>
-              <CardContent className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-medical-gray-900 mb-2">No studies yet</h3>
-                  <p className="text-medical-gray-500 mb-4">
-                    Start by uploading your first DICOM study
-                  </p>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Upload Study
-                  </Button>
-                </div>
+              <CardHeader>
+                <CardTitle>All Studies</CardTitle>
+                <CardDescription>View and manage studies from your diagnostic center</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {studies.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Patient
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Study Details
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Date
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {studies.map((study) => (
+                          <tr key={study.id}>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {study.patient.first_name} {study.patient.last_name}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  ID: {study.patient.patient_id}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{study.modality}</div>
+                              <div className="text-sm text-gray-500">{study.body_part}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="space-y-1">
+                                {study.radiologist_report && (
+                                  <Badge variant="default" className="bg-green-100 text-green-700">
+                                    Final Report
+                                  </Badge>
+                                )}
+                                {study.ai_report && !study.radiologist_report && (
+                                  <Badge variant="outline" className="border-blue-500 text-blue-600">
+                                    AI Analysis
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" className="text-xs">
+                                  {study.status}
+                                </Badge>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {new Date(study.study_date).toLocaleDateString()}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                              {(study.radiologist_report || study.ai_report) && (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => navigate(`/studies/${study.id}/reports/editor`)}
+                                >
+                                  <FileCheck className="h-4 w-4 mr-1" />
+                                  View Report
+                                </Button>
+                              )}
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => navigate(`/studies/${study.id}/viewer`)}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View Study
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No studies yet</h3>
+                    <p className="text-gray-500 mb-4">
+                      Studies uploaded by your center's technicians will appear here
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

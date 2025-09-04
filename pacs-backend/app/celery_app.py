@@ -9,16 +9,17 @@ logger = logging.getLogger(__name__)
 celery_app = Celery(
     "pacs_tasks",
     broker=os.getenv("REDIS_URL", "redis://localhost:6379"),
-    backend=os.getenv("REDIS_URL", "redis://localhost:6379")
+    backend=os.getenv("REDIS_URL", "redis://localhost:6379"),
 )
 
 celery_app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
     enable_utc=True,
 )
+
 
 @celery_app.task
 def process_dicom_study_async(study_id: int):
@@ -29,20 +30,21 @@ def process_dicom_study_async(study_id: int):
         if not study:
             logger.error(f"Study {study_id} not found")
             return
-        
+
         ai_service = RealAIService()
         ai_report = ai_service.analyze_study(study_id)
-        
+
         study.ai_report = ai_report
         db.commit()
-        
+
         logger.info(f"AI analysis completed for study {study_id}")
-        
+
     except Exception as e:
         logger.error(f"Error processing study {study_id}: {e}")
         db.rollback()
     finally:
         db.close()
+
 
 @celery_app.task
 def cleanup_old_sessions():

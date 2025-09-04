@@ -10,7 +10,7 @@ import { Upload, FileText, Activity, Plus, Search, Eye, LogOut, Trash2, CheckCir
 import * as dicomParser from 'dicom-parser'
 
 interface Study {
-  id: number
+  id: string
   study_uid: string
   patient_id: number
   study_date: string
@@ -27,7 +27,7 @@ interface Study {
 }
 
 export default function TechnicianDashboard() {
-  const { user, token, logout } = useAuth()
+  const { user, token, logout, refreshToken, isTokenValid } = useAuth()
   const navigate = useNavigate()
   const [studies, setStudies] = useState<Study[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,14 +59,74 @@ export default function TechnicianDashboard() {
   })
   const [showUploadConfirmation, setShowUploadConfirmation] = useState(false)
   const [uploadResult, setUploadResult] = useState<{
-    study_id: number;
+    study_id: string;
     patient_id: number;
     files_uploaded: number;
     message: string;
+    patient_data?: {
+      first_name: string;
+      last_name: string;
+      patient_id: string;
+      date_of_birth: string;
+      gender: string;
+    };
+    study_data?: {
+      study_description: string;
+      modality: string;
+      body_part: string;
+      study_date: string;
+    };
   } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const API_URL = 'http://127.0.0.1:8000'
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+  const fetchStudies = useCallback(async () => {
+    try {
+      // Check if token is valid before making request
+      if (!isTokenValid()) {
+        console.log('Token expired, attempting refresh...')
+        const refreshSuccess = await refreshToken()
+        if (!refreshSuccess) {
+          console.log('Token refresh failed, redirecting to login')
+          logout()
+          navigate('/login')
+          return
+        }
+      }
+
+      const response = await fetch(`${API_URL}/studies/`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStudies(data)
+      } else if (response.status === 401) {
+        // Token might be expired, try refresh
+        console.log('Received 401, attempting token refresh...')
+        const refreshSuccess = await refreshToken()
+        if (refreshSuccess) {
+          // Retry the request with new token
+          const retryResponse = await fetch(`${API_URL}/studies/`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          if (retryResponse.ok) {
+            const data = await retryResponse.json()
+            setStudies(data)
+          }
+        } else {
+          console.log('Token refresh failed, redirecting to login')
+          logout()
+          navigate('/login')
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching studies:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [token, isTokenValid, refreshToken, logout, navigate, API_URL])
 
   useEffect(() => {
     fetchStudies()
@@ -80,23 +140,6 @@ export default function TechnicianDashboard() {
     return () => clearInterval(refreshInterval)
   }, [fetchStudies])
 
-  const fetchStudies = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_URL}/studies/`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setStudies(data)
-      }
-    } catch (error) {
-      console.error('Error fetching studies:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [token])
-
   const stats = {
     totalStudies: studies.length,
     pendingStudies: studies.filter(s => s.status === 'pending').length,
@@ -106,7 +149,7 @@ export default function TechnicianDashboard() {
     ).length,
   }
 
-  const requestStudyDeletion = async (studyId: number) => {
+  const requestStudyDeletion = async (studyId: string) => {
     if (!deletionReason.trim()) {
       alert('Please provide a reason for deletion');
       return;
@@ -182,7 +225,11 @@ export default function TechnicianDashboard() {
             last_name: metadata.last_name || patientData.last_name,
             date_of_birth: metadata.date_of_birth ? 
               `${metadata.date_of_birth.slice(0,4)}-${metadata.date_of_birth.slice(4,6)}-${metadata.date_of_birth.slice(6,8)}` : 
-              patientData.date_of_birth
+              patientData.date_of_birth,
+            gender: metadata.gender || patientData.gender,
+            phone: patientData.phone,
+            email: patientData.email,
+            address: patientData.address
           })
           
           setStudyData({
@@ -191,7 +238,8 @@ export default function TechnicianDashboard() {
             body_part: metadata.body_part || studyData.body_part,
             study_date: metadata.study_date ? 
               `${metadata.study_date.slice(0,4)}-${metadata.study_date.slice(4,6)}-${metadata.study_date.slice(6,8)}` : 
-              studyData.study_date
+              studyData.study_date,
+            priority: studyData.priority
           })
         }
       }
@@ -217,7 +265,11 @@ export default function TechnicianDashboard() {
             last_name: metadata.last_name || patientData.last_name,
             date_of_birth: metadata.date_of_birth ? 
               `${metadata.date_of_birth.slice(0,4)}-${metadata.date_of_birth.slice(4,6)}-${metadata.date_of_birth.slice(6,8)}` : 
-              patientData.date_of_birth
+              patientData.date_of_birth,
+            gender: metadata.gender || patientData.gender,
+            phone: patientData.phone,
+            email: patientData.email,
+            address: patientData.address
           })
           
           setStudyData({
@@ -226,7 +278,8 @@ export default function TechnicianDashboard() {
             body_part: metadata.body_part || studyData.body_part,
             study_date: metadata.study_date ? 
               `${metadata.study_date.slice(0,4)}-${metadata.study_date.slice(4,6)}-${metadata.study_date.slice(6,8)}` : 
-              studyData.study_date
+              studyData.study_date,
+            priority: studyData.priority
           })
         }
       }
@@ -244,6 +297,18 @@ export default function TechnicianDashboard() {
     if (selectedFiles.length === 0) {
       alert('Please select DICOM files to upload')
       return
+    }
+
+    // Check token validity before upload
+    if (!isTokenValid()) {
+      try {
+        await refreshToken()
+      } catch (error) {
+        console.error('Token refresh failed:', error)
+        logout()
+        navigate('/login')
+        return
+      }
     }
 
     setUploading(true)
@@ -287,7 +352,24 @@ export default function TechnicianDashboard() {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const result = JSON.parse(xhr.responseText)
-            setUploadResult(result)
+            // Preserve form data in upload result for confirmation dialog
+            const enrichedResult = {
+              ...result,
+              patient_data: {
+                first_name: patientData.first_name,
+                last_name: patientData.last_name,
+                patient_id: patientData.patient_id,
+                date_of_birth: patientData.date_of_birth,
+                gender: patientData.gender
+              },
+              study_data: {
+                study_description: studyData.study_description,
+                modality: studyData.modality,
+                body_part: studyData.body_part,
+                study_date: studyData.study_date
+              }
+            }
+            setUploadResult(enrichedResult)
             setUploadStatus('success')
             setShowUploadConfirmation(true)
             setShowSuccessNotification(true)
@@ -309,6 +391,85 @@ export default function TechnicianDashboard() {
             reject(error)
           }
         } else {
+          // Handle 401 specifically for token refresh
+          if (xhr.status === 401) {
+            refreshToken().then(() => {
+              // Retry the upload with new token
+              const retryXhr = new XMLHttpRequest()
+              
+              // Set up the same event listeners for retry
+              retryXhr.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable) {
+                  const percentComplete = Math.round((event.loaded / event.total) * 100)
+                  setUploadProgress(percentComplete)
+                  
+                  const elapsedTime = (Date.now() - startTime) / 1000
+                  const uploadedMB = event.loaded / (1024 * 1024)
+                  const speed = elapsedTime > 0 ? uploadedMB / elapsedTime : 0
+                  setUploadSpeed(speed)
+                }
+              })
+              
+              retryXhr.addEventListener('load', () => {
+                setUploading(false)
+                if (retryXhr.status >= 200 && retryXhr.status < 300) {
+                  try {
+                    const result = JSON.parse(retryXhr.responseText)
+                    setUploadResult(result)
+                    setUploadStatus('success')
+                    setShowUploadConfirmation(true)
+                    setShowSuccessNotification(true)
+                    
+                    setTimeout(() => {
+                      setShowSuccessNotification(false)
+                      resetUploadState()
+                    }, 5000)
+                    
+                    setSelectedFiles([])
+                    setPatientData({ patient_id: '', first_name: '', last_name: '', date_of_birth: '', gender: '', phone: '', email: '', address: '' })
+                    setStudyData({ study_description: '', modality: '', body_part: '', study_date: '', priority: 'normal' })
+                    fetchStudies()
+                    resolve()
+                  } catch (error) {
+                    setUploadStatus('error')
+                    setUploadError('Failed to parse server response')
+                    reject(error)
+                  }
+                } else {
+                  try {
+                    const error = JSON.parse(retryXhr.responseText)
+                    setUploadStatus('error')
+                    setUploadError(error.detail || 'Upload failed after token refresh')
+                  } catch {
+                    setUploadStatus('error')
+                    setUploadError(`Upload failed with status ${retryXhr.status} after token refresh`)
+                  }
+                  reject(new Error(`Upload failed with status ${retryXhr.status}`))
+                }
+              })
+              
+              retryXhr.addEventListener('error', () => {
+                setUploading(false)
+                setUploadStatus('error')
+                setUploadError('Network error occurred during retry upload')
+                reject(new Error('Network error on retry'))
+              })
+              
+              retryXhr.open('POST', `${API_URL}/studies/upload`)
+              retryXhr.setRequestHeader('Authorization', `Bearer ${token}`)
+              retryXhr.send(formData)
+            }).catch((refreshError) => {
+              console.error('Token refresh failed during upload:', refreshError)
+              setUploading(false)
+              setUploadStatus('error')
+              setUploadError('Authentication failed. Please log in again.')
+              logout()
+              navigate('/login')
+              reject(refreshError)
+            })
+            return
+          }
+          
           try {
             const error = JSON.parse(xhr.responseText)
             setUploadStatus('error')
@@ -729,7 +890,7 @@ export default function TechnicianDashboard() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {studies.filter(study => study.status === 'completed' || study.radiologist_report || study.ai_report).map((study) => (
+                    {studies.filter(study => study.status === 'completed').map((study) => (
                       <tr key={study.id}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
@@ -747,19 +908,14 @@ export default function TechnicianDashboard() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="space-y-1">
-                            {study.radiologist_report && (
+                            {study.status === 'completed' && (
                               <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
-                                Final Report
+                                Completed
                               </span>
                             )}
-                            {study.ai_report && !study.radiologist_report && (
-                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-700">
-                                AI Report
-                              </span>
-                            )}
-                            {!study.ai_report && !study.radiologist_report && (
+                            {study.status !== 'completed' && (
                               <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-700">
-                                No Report
+                                {study.status}
                               </span>
                             )}
                           </div>
@@ -768,7 +924,7 @@ export default function TechnicianDashboard() {
                           {new Date(study.created_at).toLocaleDateString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                          {(study.radiologist_report || study.ai_report) && (
+                          {study.status === 'completed' && (
                             <Button 
                               variant="outline" 
                               size="sm" 
@@ -791,7 +947,7 @@ export default function TechnicianDashboard() {
                     ))}
                   </tbody>
                 </table>
-                {studies.filter(study => study.status === 'completed' || study.radiologist_report || study.ai_report).length === 0 && (
+                {studies.filter(study => study.status === 'completed').length === 0 && (
                   <div className="text-center py-12">
                     <FileCheck className="mx-auto h-12 w-12 text-gray-400" />
                     <h3 className="mt-2 text-sm font-medium text-gray-900">No reports available</h3>
@@ -1090,39 +1246,56 @@ export default function TechnicianDashboard() {
                 <div className="space-y-4">
                   {uploadResult && (
                     <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <h4 className="font-medium text-green-800 mb-3">Extracted Patient Information:</h4>
+                      <h4 className="font-medium text-green-800 mb-3">Upload Summary:</h4>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-600">Patient Name:</span>
-                          <span className="font-medium">{uploadResult.patient?.first_name} {uploadResult.patient?.last_name}</span>
+                          <span className="font-medium">
+                            {uploadResult.patient_data?.first_name && uploadResult.patient_data?.last_name 
+                              ? `${uploadResult.patient_data.first_name} ${uploadResult.patient_data.last_name}`
+                              : 'Not provided'
+                            }
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Patient ID:</span>
-                          <span className="font-medium">{uploadResult.patient?.patient_id}</span>
+                          <span className="font-medium">
+                            {uploadResult.patient_data?.patient_id || 'Auto-generated'}
+                          </span>
                         </div>
-                        {uploadResult.patient?.date_of_birth && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Date of Birth:</span>
-                            <span className="font-medium">{new Date(uploadResult.patient.date_of_birth).toLocaleDateString()}</span>
-                          </div>
-                        )}
-                        {uploadResult.patient?.gender && (
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Gender:</span>
-                            <span className="font-medium">{uploadResult.patient.gender === 'M' ? 'Male' : uploadResult.patient.gender === 'F' ? 'Female' : 'Other'}</span>
-                          </div>
-                        )}
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Date of Birth:</span>
+                          <span className="font-medium">
+                            {uploadResult.patient_data?.date_of_birth || 'Not provided'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Gender:</span>
+                          <span className="font-medium">
+                            {uploadResult.patient_data?.gender || 'Not provided'}
+                          </span>
+                        </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Study Description:</span>
-                          <span className="font-medium">{uploadResult.study_description || 'N/A'}</span>
+                          <span className="font-medium">
+                            {uploadResult.study_data?.study_description || 'Not provided'}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Modality:</span>
-                          <span className="font-medium">{uploadResult.modality || 'N/A'}</span>
+                          <span className="font-medium">
+                            {uploadResult.study_data?.modality || 'Not provided'}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-600">Body Part:</span>
-                          <span className="font-medium">{uploadResult.body_part || 'N/A'}</span>
+                          <span className="font-medium">
+                            {uploadResult.study_data?.body_part || 'Not provided'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Files Uploaded:</span>
+                          <span className="font-medium">{uploadResult.files_uploaded}</span>
                         </div>
                       </div>
                     </div>
@@ -1133,6 +1306,7 @@ export default function TechnicianDashboard() {
                     </Button>
                     <Button onClick={() => {
                       setShowUploadConfirmation(false)
+                      setActiveTab('studies')
                       fetchStudies()
                     }}>
                       View Studies
@@ -1145,69 +1319,7 @@ export default function TechnicianDashboard() {
         )}
       </div>
 
-      {/* Upload Confirmation Dialog */}
-      <Dialog open={showUploadConfirmation} onOpenChange={setShowUploadConfirmation}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center space-x-2">
-              <CheckCircle className="h-5 w-5 text-green-600" />
-              <span>DICOM Files Uploaded Successfully</span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {uploadResult && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <h4 className="font-medium text-green-800 mb-3">Extracted Patient Information:</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Patient Name:</span>
-                    <span className="font-medium">{uploadResult.patient?.first_name} {uploadResult.patient?.last_name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Patient ID:</span>
-                    <span className="font-medium">{uploadResult.patient?.patient_id}</span>
-                  </div>
-                  {uploadResult.patient?.date_of_birth && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Date of Birth:</span>
-                      <span className="font-medium">{new Date(uploadResult.patient.date_of_birth).toLocaleDateString()}</span>
-                    </div>
-                  )}
-                  {uploadResult.patient?.gender && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Gender:</span>
-                      <span className="font-medium">{uploadResult.patient.gender === 'M' ? 'Male' : uploadResult.patient.gender === 'F' ? 'Female' : 'Other'}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Study Description:</span>
-                    <span className="font-medium">{uploadResult.study_description || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Modality:</span>
-                    <span className="font-medium">{uploadResult.modality || 'N/A'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Body Part:</span>
-                    <span className="font-medium">{uploadResult.body_part || 'N/A'}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="flex justify-end space-x-2">
-              <Button onClick={() => setShowUploadConfirmation(false)}>
-                Close
-              </Button>
-              <Button onClick={() => {
-                setShowUploadConfirmation(false)
-                fetchStudies()
-              }}>
-                View Studies
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
     </div>
   )
 }

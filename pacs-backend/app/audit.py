@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from typing import Optional, Dict, Any
 
+
 def log_audit_event(
     db: Session,
     action: str,
@@ -12,10 +13,10 @@ def log_audit_event(
     resource_type: Optional[str] = None,
     resource_id: Optional[str] = None,
     request: Optional[Request] = None,
-    details: Optional[Dict[str, Any]] = None
+    details: Optional[Dict[str, Any]] = None,
 ):
     """Log audit event to database"""
-    
+
     audit_log = AuditLog(
         user_id=user.id if user else None,
         action=action,
@@ -24,22 +25,28 @@ def log_audit_event(
         ip_address=request.client.host if request else None,
         user_agent=request.headers.get("user-agent") if request else None,
         details=json.dumps(details) if details else None,
-        timestamp=datetime.utcnow()
+        timestamp=datetime.utcnow(),
     )
-    
+
     db.add(audit_log)
     db.commit()
+
 
 def anonymize_phi(data: Dict[str, Any]) -> Dict[str, Any]:
     """Anonymize PHI data for compliance"""
     phi_fields = [
-        'patient_name', 'first_name', 'last_name', 
-        'email', 'phone', 'address', 'patient_id'
+        "patient_name",
+        "first_name",
+        "last_name",
+        "email",
+        "phone",
+        "address",
+        "patient_id",
     ]
-    
+
     anonymized = data.copy()
     for field in phi_fields:
         if field in anonymized:
             anonymized[field] = "***REDACTED***"
-    
+
     return anonymized

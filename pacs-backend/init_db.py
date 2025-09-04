@@ -48,7 +48,9 @@ def init_database():
                 "full_name": "Dr. John Radiologist",
                 "password": "radio123",
                 "role": UserRole.RADIOLOGIST,
-                "diagnostic_center_id": center.id
+                "diagnostic_center_id": center.id,
+                "medical_license_number": "RAD-2024-001",
+                "board_certification": "American Board of Radiology"
             },
             {
                 "email": "doctor@pacs.com", 
@@ -86,6 +88,8 @@ def init_database():
                     hashed_password=get_password_hash(user_data["password"]),
                     role=user_data["role"],
                     diagnostic_center_id=user_data.get("diagnostic_center_id"),
+                    medical_license_number=user_data.get("medical_license_number"),
+                    board_certification=user_data.get("board_certification"),
                     is_active=True
                 )
                 db.add(user)

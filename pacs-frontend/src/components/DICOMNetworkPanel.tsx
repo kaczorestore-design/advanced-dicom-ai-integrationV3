@@ -56,7 +56,7 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
 
   useEffect(() => {
     initializeNetworkService();
-  }, [useDIMSE]);
+  }, [useDIMSE, initializeNetworkService]);
 
   const initializeNetworkService = () => {
     const dicomwebConfig: DICOMwebConfig = {
@@ -135,22 +135,32 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
   };
 
   return (
-    <Card className="bg-gray-700 border-gray-600">
+    <Card className={`transition-all duration-200 ${
+      theme === 'dark' 
+        ? 'bg-gradient-to-br from-slate-800/95 to-slate-900/95 border border-slate-700/50' 
+        : 'bg-gradient-to-br from-white/95 to-gray-50/95 border border-gray-200/60'
+    } backdrop-blur-md shadow-lg`}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm text-white flex items-center">
+        <CardTitle className={`text-sm flex items-center ${
+          theme === 'dark' ? 'text-white' : 'text-gray-800'
+        }`}>
           <Network className="w-4 h-4 mr-2" />
           DICOM Network
           {getConnectionBadge()}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 p-3 sm:p-4">
         {/* Protocol Selection */}
-        <div className="flex space-x-2">
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
           <Button
             variant={!useDIMSE ? 'default' : 'outline'}
             size="sm"
             onClick={() => setUseDIMSE(false)}
-            className="text-xs"
+            className={`text-xs flex-1 transition-all duration-200 ${
+              theme === 'dark' 
+                ? 'hover:bg-blue-600 border-slate-600' 
+                : 'hover:bg-blue-50 border-gray-300'
+            }`}
           >
             DICOMweb
           </Button>
@@ -158,17 +168,23 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
             variant={useDIMSE ? 'default' : 'outline'}
             size="sm"
             onClick={() => setUseDIMSE(true)}
-            className="text-xs"
+            className={`text-xs flex-1 transition-all duration-200 ${
+              theme === 'dark' 
+                ? 'hover:bg-blue-600 border-slate-600' 
+                : 'hover:bg-blue-50 border-gray-300'
+            }`}
           >
             DIMSE
           </Button>
         </div>
 
         {/* Connection Status */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0">
           <div className="flex items-center space-x-2">
             {getConnectionIcon()}
-            <span className="text-xs text-gray-300">
+            <span className={`text-xs ${
+              theme === 'dark' ? 'text-slate-300' : 'text-gray-600'
+            }`}>
               {useDIMSE ? 'DIMSE' : 'DICOMweb'} Connection
             </span>
           </div>
@@ -177,47 +193,77 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
             size="sm"
             onClick={testConnection}
             disabled={connectionStatus === 'connecting'}
-            className="text-xs"
+            className={`text-xs transition-all duration-200 ${
+              theme === 'dark' 
+                ? 'hover:bg-slate-700 border-slate-600' 
+                : 'hover:bg-gray-50 border-gray-300'
+            }`}
           >
             Test
           </Button>
         </div>
 
-        <Separator className="bg-gray-600" />
+        <Separator className={`${
+          theme === 'dark' ? 'bg-slate-600' : 'bg-gray-300'
+        }`} />
 
         {/* Search Criteria */}
-        <div className="space-y-2">
-          <div className="text-xs text-gray-300 font-medium">Search Studies</div>
-          <Input
-            placeholder="Patient ID"
-            value={searchCriteria.PatientID}
-            onChange={(e) => setSearchCriteria(prev => ({ ...prev, PatientID: e.target.value }))}
-            className="bg-gray-600 border-gray-500 text-white text-xs"
-          />
-          <Input
-            placeholder="Patient Name"
-            value={searchCriteria.PatientName}
-            onChange={(e) => setSearchCriteria(prev => ({ ...prev, PatientName: e.target.value }))}
-            className="bg-gray-600 border-gray-500 text-white text-xs"
-          />
-          <Input
-            placeholder="Study Date (YYYYMMDD)"
-            value={searchCriteria.StudyDate}
-            onChange={(e) => setSearchCriteria(prev => ({ ...prev, StudyDate: e.target.value }))}
-            className="bg-gray-600 border-gray-500 text-white text-xs"
-          />
-          <Input
-            placeholder="Modality"
-            value={searchCriteria.Modality}
-            onChange={(e) => setSearchCriteria(prev => ({ ...prev, Modality: e.target.value }))}
-            className="bg-gray-600 border-gray-500 text-white text-xs"
-          />
+        <div className="space-y-3">
+          <div className={`text-xs font-medium ${
+            theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
+          }`}>Search Studies</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Input
+              placeholder="Patient ID"
+              value={searchCriteria.PatientID}
+              onChange={(e) => setSearchCriteria(prev => ({ ...prev, PatientID: e.target.value }))}
+              className={`text-xs transition-all duration-200 ${
+                theme === 'dark' 
+                  ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+              }`}
+            />
+            <Input
+              placeholder="Patient Name"
+              value={searchCriteria.PatientName}
+              onChange={(e) => setSearchCriteria(prev => ({ ...prev, PatientName: e.target.value }))}
+              className={`text-xs transition-all duration-200 ${
+                theme === 'dark' 
+                  ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+              }`}
+            />
+            <Input
+              placeholder="Study Date (YYYYMMDD)"
+              value={searchCriteria.StudyDate}
+              onChange={(e) => setSearchCriteria(prev => ({ ...prev, StudyDate: e.target.value }))}
+              className={`text-xs transition-all duration-200 ${
+                theme === 'dark' 
+                  ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+              }`}
+            />
+            <Input
+              placeholder="Modality"
+              value={searchCriteria.Modality}
+              onChange={(e) => setSearchCriteria(prev => ({ ...prev, Modality: e.target.value }))}
+              className={`text-xs transition-all duration-200 ${
+                theme === 'dark' 
+                  ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                  : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+              }`}
+            />
+          </div>
           <Button
             variant="outline"
             size="sm"
             onClick={searchStudies}
             disabled={connectionStatus !== 'connected'}
-            className="w-full text-xs"
+            className={`w-full text-xs transition-all duration-200 ${
+              theme === 'dark' 
+                ? 'hover:bg-blue-600 border-slate-600 disabled:opacity-50' 
+                : 'hover:bg-blue-50 border-gray-300 disabled:opacity-50'
+            }`}
           >
             <Search className="w-3 h-3 mr-2" />
             Search
@@ -226,11 +272,13 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
 
         {/* Search Results */}
         {searchResults.length > 0 && (
-          <div className="space-y-2">
-            <div className="text-xs text-gray-300 font-medium">
+          <div className="space-y-3">
+            <div className={`text-xs font-medium ${
+              theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
+            }`}>
               Results ({searchResults.length})
             </div>
-            <div className="max-h-40 overflow-y-auto space-y-1">
+            <div className="max-h-40 overflow-y-auto space-y-2">
               {searchResults.map((study, index) => {
                 const patientID = useDIMSE ? study['0010,0020'] : study['00100020']?.Value?.[0];
                 const patientName = useDIMSE ? study['0010,0010'] : study['00100010']?.Value?.[0]?.Alphabetic;
@@ -240,17 +288,27 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                 return (
                   <div
                     key={index}
-                    className="bg-gray-600 p-2 rounded text-xs cursor-pointer hover:bg-gray-500"
+                    className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg border transition-all duration-200 cursor-pointer ${
+                      theme === 'dark' 
+                        ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-700' 
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                    }`}
                     onClick={() => retrieveStudy(study)}
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="text-white font-medium">{patientName || 'Unknown'}</div>
-                        <div className="text-gray-300">ID: {patientID}</div>
-                        <div className="text-gray-400">{studyDate} • {modality}</div>
-                      </div>
-                      <Download className="w-3 h-3 text-gray-400" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className={`text-xs font-medium truncate ${
+                        theme === 'dark' ? 'text-white' : 'text-gray-900'
+                      }`}>{patientName || 'Unknown'}</div>
+                      <div className={`text-xs truncate ${
+                        theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+                      }`}>ID: {patientID}</div>
+                      <div className={`text-xs truncate ${
+                        theme === 'dark' ? 'text-slate-400' : 'text-gray-600'
+                      }`}>{studyDate} • {modality}</div>
                     </div>
+                    <Download className={`w-3 h-3 mt-2 sm:mt-0 sm:ml-2 ${
+                      theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
+                    }`} />
                   </div>
                 );
               })}
@@ -259,10 +317,16 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
         )}
 
         {/* Configuration */}
-        <div className="space-y-2">
-          <div className="text-xs text-gray-300 font-medium">Configuration</div>
-          {useDIMSE ? (
-            <div className="space-y-1">
+        <Separator className={`${
+          theme === 'dark' ? 'bg-slate-600' : 'bg-gray-300'
+        }`} />
+        
+        {useDIMSE ? (
+          <div className="space-y-3">
+            <div className={`text-xs font-medium ${
+              theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
+            }`}>DIMSE Configuration</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <Input
                 placeholder="Host"
                 value={config.dimse.host}
@@ -270,7 +334,11 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                   ...prev,
                   dimse: { ...prev.dimse, host: e.target.value }
                 }))}
-                className="bg-gray-600 border-gray-500 text-white text-xs"
+                className={`text-xs transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+                }`}
               />
               <Input
                 placeholder="Port"
@@ -280,7 +348,11 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                   ...prev,
                   dimse: { ...prev.dimse, port: parseInt(e.target.value) || 11112 }
                 }))}
-                className="bg-gray-600 border-gray-500 text-white text-xs"
+                className={`text-xs transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+                }`}
               />
               <Input
                 placeholder="Calling AET"
@@ -289,7 +361,11 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                   ...prev,
                   dimse: { ...prev.dimse, callingAET: e.target.value }
                 }))}
-                className="bg-gray-600 border-gray-500 text-white text-xs"
+                className={`text-xs transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+                }`}
               />
               <Input
                 placeholder="Called AET"
@@ -298,11 +374,20 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                   ...prev,
                   dimse: { ...prev.dimse, calledAET: e.target.value }
                 }))}
-                className="bg-gray-600 border-gray-500 text-white text-xs"
+                className={`text-xs transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+                }`}
               />
             </div>
-          ) : (
-            <div className="space-y-1">
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className={`text-xs font-medium ${
+              theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
+            }`}>DICOMweb Configuration</div>
+            <div className="space-y-2">
               <Input
                 placeholder="WADO-RS Root URL"
                 value={config.dicomweb.wadoRsUrl}
@@ -310,7 +395,11 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                   ...prev,
                   dicomweb: { ...prev.dicomweb, wadoRsUrl: e.target.value }
                 }))}
-                className="bg-gray-600 border-gray-500 text-white text-xs"
+                className={`text-xs transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+                }`}
               />
               <Input
                 placeholder="QIDO-RS Root URL"
@@ -319,7 +408,11 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                   ...prev,
                   dicomweb: { ...prev.dicomweb, qidoRsUrl: e.target.value }
                 }))}
-                className="bg-gray-600 border-gray-500 text-white text-xs"
+                className={`text-xs transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+                }`}
               />
               <Input
                 placeholder="STOW-RS Root URL"
@@ -328,19 +421,27 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
                   ...prev,
                   dicomweb: { ...prev.dicomweb, stowRsUrl: e.target.value }
                 }))}
-                className="bg-gray-600 border-gray-500 text-white text-xs"
+                className={`text-xs transition-all duration-200 ${
+                  theme === 'dark' 
+                    ? 'bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-blue-500' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-500 focus:border-blue-500'
+                }`}
               />
             </div>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={initializeNetworkService}
-            className="w-full text-xs"
-          >
-            Update Configuration
-          </Button>
-        </div>
+          </div>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={initializeNetworkService}
+          className={`w-full text-xs transition-all duration-200 ${
+            theme === 'dark' 
+              ? 'hover:bg-blue-600 border-slate-600' 
+              : 'hover:bg-blue-50 border-gray-300'
+          }`}
+        >
+          Update Configuration
+        </Button>
       </CardContent>
     </Card>
   );

@@ -8,7 +8,7 @@ import { useRefresh } from '../hooks/useRefresh'
 import { RefreshButton } from '../components/RefreshButton'
 
 interface Study {
-  id: number
+  id: string
   study_uid: string
   patient_id: number
   study_date: string
@@ -54,7 +54,7 @@ export default function RadiologistDashboard() {
   const [pendingStudies, setPendingStudies] = useState<PendingStudy[]>([])  
   const [loading, setLoading] = useState(true)  
   const [activeTab, setActiveTab] = useState('overview')  
-  const [assigningStudy, setAssigningStudy] = useState<number | null>(null)  
+  const [assigningStudy, setAssigningStudy] = useState<string | null>(null)  
   const [savingProfile, setSavingProfile] = useState(false)  
   const [updatingPreferences, setUpdatingPreferences] = useState(false)  
   const [profileData, setProfileData] = useState({  
@@ -68,35 +68,6 @@ export default function RadiologistDashboard() {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
 
   const API_URL = 'http://127.0.0.1:8000'
-
-  useEffect(() => {
-    fetchStudies()
-    fetchPendingStudies()
-    
-    // Set up automatic refresh every 30 seconds
-    const refreshInterval = setInterval(() => {
-      fetchStudies()
-      fetchPendingStudies()
-    }, 30000)
-    
-    // Cleanup interval on component unmount
-    return () => clearInterval(refreshInterval)
-  }, [fetchStudies, fetchPendingStudies])
-
-  // Initialize profile data and preferences from user context
-  useEffect(() => {
-    if (user) {
-      setProfileData({
-        displayName: user.full_name || '',
-        email: user.email || ''
-      })
-      // Initialize preferences with default values
-      setPreferences({
-        emailNotifications: true,
-        priorityAlerts: true
-      })
-    }
-  }, [user])
 
   const fetchStudies = useCallback(async () => {
     try {
@@ -130,16 +101,6 @@ export default function RadiologistDashboard() {
     }
   }, [token])
 
-  // Use the standardized refresh hook
-  const { isRefreshing, lastRefreshed, refresh } = useRefresh(
-    [fetchStudies, fetchPendingStudies],
-    {
-      showFeedback: true,
-      onSuccess: (msg) => setMessage({ type: 'success', text: msg || 'Data refreshed successfully' }),
-      onError: (error) => setMessage({ type: 'error', text: error })
-    }
-  )
-
   useEffect(() => {
     fetchStudies()
     fetchPendingStudies()
@@ -154,9 +115,32 @@ export default function RadiologistDashboard() {
     return () => clearInterval(refreshInterval)
   }, [fetchStudies, fetchPendingStudies])
 
+  // Initialize profile data and preferences from user context
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        displayName: user.full_name || '',
+        email: user.email || ''
+      })
+      // Initialize preferences with default values
+      setPreferences({
+        emailNotifications: true,
+        priorityAlerts: true
+      })
+    }
+  }, [user])
 
+  // Use the standardized refresh hook
+  const { isRefreshing, lastRefreshed, refresh } = useRefresh(
+    [fetchStudies, fetchPendingStudies],
+    {
+      showFeedback: true,
+      onSuccess: (msg) => setMessage({ type: 'success', text: msg || 'Data refreshed successfully' }),
+      onError: (error) => setMessage({ type: 'error', text: error })
+    }
+  )
 
-  const assignStudyToSelf = async (studyId: number) => {
+  const assignStudyToSelf = async (studyId: string) => {
     setAssigningStudy(studyId)
     setMessage(null)
     try {
@@ -426,10 +410,10 @@ export default function RadiologistDashboard() {
                         <div className="flex space-x-2">
                           <Button 
                             size="sm" 
-                            onClick={() => assignStudyToSelf(study.id)}
-                            disabled={assigningStudy === study.id}
+                            onClick={() => assignStudyToSelf(String(study.id))}
+                            disabled={assigningStudy === String(study.id)}
                           >
-                            {assigningStudy === study.id ? 'Assigning...' : 'Assign to Me'}
+                            {assigningStudy === String(study.id) ? 'Assigning...' : 'Assign to Me'}
                           </Button>
                         </div>
                       </div>
@@ -547,10 +531,10 @@ export default function RadiologistDashboard() {
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <Button 
                               size="sm" 
-                              onClick={() => assignStudyToSelf(study.id)}
-                              disabled={assigningStudy === study.id}
+                              onClick={() => assignStudyToSelf(String(study.id))}
+                              disabled={assigningStudy === String(study.id)}
                             >
-                              {assigningStudy === study.id ? 'Assigning...' : 'Assign to Me'}
+                              {assigningStudy === String(study.id) ? 'Assigning...' : 'Assign to Me'}
                             </Button>
                           </td>
                         </tr>

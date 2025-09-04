@@ -14,7 +14,7 @@ const buttonVariants = cva(
         destructive:
           "bg-medical-error text-white shadow-sm hover:bg-medical-error/90 dark:bg-medical-error dark:hover:bg-medical-error/90",
         outline:
-          "border border-medical-gray-300 bg-white shadow-sm hover:bg-medical-gray-50 hover:text-medical-gray-900 dark:border-medical-gray-600 dark:bg-medical-gray-800 dark:hover:bg-medical-gray-700 dark:hover:text-white",
+          "border border-medical-gray-300 bg-white text-black shadow-sm hover:bg-medical-gray-50 hover:text-medical-gray-900 dark:border-medical-gray-600 dark:bg-medical-gray-800 dark:hover:bg-medical-gray-700 dark:hover:text-white",
         secondary:
           "bg-medical-gray-100 text-medical-gray-900 shadow-sm hover:bg-medical-gray-200 dark:bg-medical-gray-700 dark:text-white dark:hover:bg-medical-gray-600",
         ghost: "hover:bg-medical-gray-100 hover:text-medical-gray-900 dark:hover:bg-medical-gray-700 dark:hover:text-white",

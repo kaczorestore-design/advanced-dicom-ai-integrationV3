@@ -9,7 +9,7 @@ import { useRefresh } from '../hooks/useRefresh'
 import { RefreshButton } from '../components/RefreshButton'
 
 interface Study {
-  id: number
+  id: string
   study_uid: string
   patient_id: number
   study_date: string

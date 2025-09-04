@@ -1,5 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { ThemeProvider as NextThemeProvider } from 'next-themes'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ThemeProvider } from './contexts/ThemeContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import LoginPage from './pages/LoginPage'
 import AdminDashboard from './pages/AdminDashboard'
 import DiagnosticCenterDashboard from './pages/DiagnosticCenterDashboard'
@@ -8,6 +11,7 @@ import DoctorDashboard from './pages/DoctorDashboard'
 import RadiologistDashboard from './pages/RadiologistDashboard'
 import ReportEditor from './pages/ReportEditor'
 import DicomViewer from './components/DicomViewer'
+import VTKTest from './pages/VTKTest'
 import './App.css'
 
 // Legacy redirect components
@@ -126,6 +130,13 @@ function AppRoutes() {
       } />
       <Route path="/report/:studyId" element={<LegacyReportRedirect />} /> {/* Legacy redirect */}
       
+      {/* Development/Testing Routes */}
+      <Route path="/test/vtk" element={
+        <ProtectedRoute>
+          <VTKTest />
+        </ProtectedRoute>
+      } />
+      
       <Route path="/unauthorized" element={
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
@@ -142,13 +153,25 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="min-h-screen bg-gray-50">
-          <AppRoutes />
-        </div>
-      </Router>
-    </AuthProvider>
+    <ErrorBoundary>
+      <NextThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange={false}
+        themes={['light', 'dark', 'system']}
+      >
+        <ThemeProvider>
+          <AuthProvider>
+            <Router>
+              <div className="min-h-screen bg-background text-foreground">
+                <AppRoutes />
+              </div>
+            </Router>
+          </AuthProvider>
+        </ThemeProvider>
+      </NextThemeProvider>
+    </ErrorBoundary>
   )
 }
 

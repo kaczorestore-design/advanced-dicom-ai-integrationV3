@@ -8,6 +8,7 @@ from .. import schemas
 
 router = APIRouter(prefix="/admin", tags=["audit"])
 
+
 @router.get("/audit-logs")
 async def get_audit_logs(
     skip: int = 0,
@@ -15,18 +16,18 @@ async def get_audit_logs(
     action: Optional[str] = None,
     user_id: Optional[int] = None,
     current_user: User = Depends(require_admin),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get audit logs (admin only)"""
     query = db.query(AuditLog)
-    
+
     if action:
         query = query.filter(AuditLog.action == action)
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
-    
+
     logs = query.order_by(AuditLog.timestamp.desc()).offset(skip).limit(limit).all()
-    
+
     return [
         {
             "id": log.id,
@@ -37,7 +38,7 @@ async def get_audit_logs(
             "ip_address": log.ip_address,
             "user_agent": log.user_agent,
             "details": log.details,
-            "timestamp": log.timestamp
+            "timestamp": log.timestamp,
         }
         for log in logs
     ]

@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 interface Measurement {
   id: string;
-  studyId: number;
+  studyId: string;
   imageIndex: number;
   type: 'length' | 'angle' | 'rectangle' | 'ellipse' | 'freehand' | 'cobb';
   value: number;
@@ -15,7 +15,7 @@ interface Measurement {
   modifiedAt?: string;
 }
 
-export const useMeasurements = (studyId: number) => {
+export const useMeasurements = (studyId: string) => {
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
   const [loading, setLoading] = useState(false);
   const { token, user } = useAuth();

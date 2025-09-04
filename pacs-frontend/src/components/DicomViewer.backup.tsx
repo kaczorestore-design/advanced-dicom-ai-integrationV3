@@ -56,7 +56,7 @@ import * as cornerstoneMath from 'cornerstone-math';
 
 
 interface Study {
-  id: number;
+  id: string;
   patient_name: string;
   patient_id: string;
   study_date: string;
@@ -287,7 +287,13 @@ export default function DicomViewer() {
 
   useEffect(() => {
     if (isInitialized && imageIds && imageIds.length > 0 && viewMode === '2d') {
-      console.log('✅ Cornerstone initialized, loading images:', imageIds);
+      console.log(`✅ Cornerstone initialized, loading ${imageIds.length} images`);
+        if (imageIds.length > 0) {
+          console.log('First image ID:', imageIds[0]);
+          if (imageIds.length > 1) {
+            console.log('Last image ID:', imageIds[imageIds.length - 1]);
+          }
+        }
       loadImage(0);
     }
   }, [isInitialized, imageIds, viewMode]);
@@ -327,7 +333,10 @@ export default function DicomViewer() {
         
         element.addEventListener('cornerstoneimagerendered', handleStackScroll);
         
-        console.log('✅ Image stack configured for mouse wheel scrolling:', imageIds.length, 'images');
+        console.log(`✅ Image stack configured for mouse wheel scrolling: ${imageIds.length} images`);
+        if (imageIds.length > 0) {
+          console.log('Stack contains images from:', imageIds[0], 'to:', imageIds[imageIds.length - 1]);
+        }
         
         // Cleanup function
         return () => {
@@ -361,7 +370,10 @@ export default function DicomViewer() {
               `wadouri:${API_URL}/api/studies/dicom/files/${file.id}`
             );
             setImageIds(ids);
-            console.log('✅ Study loaded with image IDs:', ids);
+            console.log(`✅ Study loaded with ${ids.length} image IDs:`);
+            ids.forEach((id, index) => {
+              console.log(`  [${index + 1}] ${id}`);
+            });
           } else {
             const mockIds = Array.from({ length: 120 }, (_, i) => 
               `example://image-${i + 1}`
@@ -942,7 +954,9 @@ export default function DicomViewer() {
       canvas.height = image.height;
       
       // Use cornerstone's built-in canvas rendering
-      const enabledElement = cornerstone.getEnabledElement(element);
+      // TODO: Update for Cornerstone3D
+      // const enabledElement = cornerstone.getEnabledElement(element);
+      const enabledElement = null;
       if (enabledElement && enabledElement.canvas) {
         context.drawImage(enabledElement.canvas, 0, 0);
       } else {

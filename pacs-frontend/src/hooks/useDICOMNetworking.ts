@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
-import { DICOMwebService } from '../services/dicomweb';
+import { DICOMwebService, DICOMStudy } from '../services/dicomweb';
 import { DIMSEService } from '../services/dicomTraditional';
 
 interface NetworkConfig {
@@ -39,7 +39,7 @@ export const useDICOMNetworking = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<DICOMStudy[]>([]);
   const [currentConfig, setCurrentConfig] = useState<NetworkConfig | null>(null);
 
   const dicomwebService = useMemo(() => new DICOMwebService({
@@ -85,7 +85,25 @@ export const useDICOMNetworking = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [dicomwebService, dimseService]);
+
+  // Helper function to convert DICOMSearchResult to DICOMStudy
+  const convertSearchResultToStudy = (result: DICOMSearchResult): DICOMStudy | null => {
+    // Extract StudyInstanceUID from either DICOMweb or DIMSE format
+    const studyUID = result['0020000D']?.Value?.[0] || result['0020,000D'];
+    
+    if (!studyUID) {
+      return null; // Skip results without StudyInstanceUID
+    }
+
+    return {
+      StudyInstanceUID: studyUID,
+      PatientID: result['00100020']?.Value?.[0] || result['0010,0020'],
+      PatientName: result['00100010']?.Value?.[0] || result['0010,0010'],
+      StudyDate: result['00080020']?.Value?.[0] || result['0008,0020'],
+      Modality: result['00080060']?.Value?.[0] || result['0008,0060']
+    };
+  };
 
   const searchStudies = useCallback(async (criteria: SearchCriteria) => {
     if (!isConnected || !currentConfig) {
@@ -114,8 +132,13 @@ export const useDICOMNetworking = () => {
         results = searchResult || [];
       }
 
-      setSearchResults(results);
-      return results;
+      // Convert search results to DICOMStudy format
+      const convertedResults = results
+        .map(convertSearchResultToStudy)
+        .filter((study): study is DICOMStudy => study !== null);
+
+      setSearchResults(convertedResults);
+      return convertedResults;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Search failed';
       setError(errorMessage);
@@ -123,7 +146,7 @@ export const useDICOMNetworking = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isConnected, currentConfig]);
+  }, [isConnected, currentConfig, dicomwebService, dimseService]);
 
   const retrieveStudy = useCallback(async (studyUID: string) => {
     if (!isConnected || !currentConfig) {
@@ -149,7 +172,7 @@ export const useDICOMNetworking = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isConnected, currentConfig]);
+  }, [isConnected, currentConfig, dicomwebService, dimseService]);
 
   const storeInstance = useCallback(async (dicomFile: File) => {
     if (!isConnected || !currentConfig) {
@@ -179,7 +202,7 @@ export const useDICOMNetworking = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [isConnected, currentConfig]);
+  }, [isConnected, currentConfig, dicomwebService, dimseService]);
 
   const disconnect = useCallback(() => {
     setIsConnected(false);
@@ -190,7 +213,7 @@ export const useDICOMNetworking = () => {
     if (currentConfig?.protocol === 'dimse') {
       dimseService.disconnect();
     }
-  }, [currentConfig]);
+  }, [currentConfig, dimseService]);
 
   return {
     isConnected,

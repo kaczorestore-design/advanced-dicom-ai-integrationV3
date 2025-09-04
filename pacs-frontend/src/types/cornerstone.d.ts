@@ -51,29 +51,53 @@ declare module 'cornerstone-core' {
 }
 
 declare module 'cornerstone-tools' {
-  export interface Tool {
+  interface Tool {
     name: string;
+    analyzeRegion?: (data: any, element: HTMLElement) => Promise<any>;
+    analyzeTexture?: (data: any, element: HTMLElement) => Promise<any>;
+    analyzeMorphology?: (data: any, element: HTMLElement) => Promise<any>;
   }
 
-  export const LengthTool: Tool;
-  export const AngleTool: Tool;
-  export const RectangleRoiTool: Tool;
-  export const EllipticalRoiTool: Tool;
-  export const WwwcTool: Tool;
-  export const PanTool: Tool;
-  export const ZoomTool: Tool;
-  export const StackScrollMouseWheelTool: Tool;
+  const LengthTool: Tool;
+  const AngleTool: Tool;
+  const RectangleRoiTool: Tool;
+  const EllipticalRoiTool: Tool;
+  const WwwcTool: Tool;
+  const PanTool: Tool;
+  const ZoomTool: Tool;
+  const StackScrollMouseWheelTool: Tool;
 
-  export const external: {
+  const external: {
     cornerstone: typeof import('cornerstone-core');
     Hammer: typeof import('hammerjs');
     cornerstoneMath: typeof import('cornerstone-math');
   };
 
-  export function init(): void;
-  export function addTool(tool: Tool): void;
-  export function setToolActive(toolName: string, options?: Record<string, unknown>): void;
-  export function setToolPassive(toolName: string): void;
+  function init(): void;
+  function addTool(tool: Tool): void;
+  function setToolActive(toolName: string, options?: Record<string, unknown>): void;
+  function setToolPassive(toolName: string): void;
+  function getToolForElement(element: HTMLElement, toolName: string): Tool | undefined;
+  function addToolState(element: HTMLElement, toolName: string, data: any): void;
+
+  export {
+    Tool,
+    LengthTool,
+    AngleTool,
+    RectangleRoiTool,
+    EllipticalRoiTool,
+    WwwcTool,
+    PanTool,
+    ZoomTool,
+    StackScrollMouseWheelTool,
+    external,
+    init,
+    addTool,
+    setToolActive,
+    setToolPassive,
+    getToolForElement,
+    addToolState
+  };
 }
 
 declare module 'cornerstone-wado-image-loader' {

@@ -130,9 +130,9 @@ export class DIMSEService {
 
   async cFind(criteria: StudySearchCriteria): Promise<DICOMStudy[]> {
     const command = {
-      type: 'C-FIND',
+      commandType: 'C-FIND' as const,
       level: 'STUDY',
-      criteria: {
+      dataset: {
         '0010,0020': criteria.PatientID || '',
         '0010,0010': criteria.PatientName || '',
         '0008,0020': criteria.StudyDate || '',
@@ -144,14 +144,16 @@ export class DIMSEService {
       }
     };
 
-    return this.sendDIMSECommand(command);
+    const response = await this.sendDIMSECommand(command);
+    // Convert DIMSE response to DICOMStudy array
+    return response.dataset ? [response.dataset as DICOMStudy] : [];
   }
 
   async cFindSeries(criteria: SeriesSearchCriteria): Promise<DICOMSeries[]> {
     const command = {
-      type: 'C-FIND',
+      commandType: 'C-FIND' as const,
       level: 'SERIES',
-      criteria: {
+      dataset: {
         '0020,000D': criteria.StudyInstanceUID,
         '0020,000E': criteria.SeriesInstanceUID || '',
         '0008,0060': criteria.Modality || '',
@@ -160,14 +162,16 @@ export class DIMSEService {
       }
     };
 
-    return this.sendDIMSECommand(command);
+    const response = await this.sendDIMSECommand(command);
+    // Convert DIMSE response to DICOMSeries array
+    return response.dataset ? [response.dataset as DICOMSeries] : [];
   }
 
   async cFindInstances(criteria: InstanceSearchCriteria): Promise<DICOMInstance[]> {
     const command = {
-      type: 'C-FIND',
+      commandType: 'C-FIND' as const,
       level: 'IMAGE',
-      criteria: {
+      dataset: {
         '0020,000D': criteria.StudyInstanceUID,
         '0020,000E': criteria.SeriesInstanceUID,
         '0008,0018': criteria.SOPInstanceUID || '',
@@ -175,7 +179,9 @@ export class DIMSEService {
       }
     };
 
-    return this.sendDIMSECommand(command);
+    const response = await this.sendDIMSECommand(command);
+    // Convert DIMSE response to DICOMInstance array
+    return response.dataset ? [response.dataset as DICOMInstance] : [];
   }
 
   async cMove(
@@ -185,16 +191,23 @@ export class DIMSEService {
     destinationAET?: string
   ): Promise<MoveResponse> {
     const command = {
-      type: 'C-MOVE',
+      commandType: 'C-MOVE' as const,
       destinationAET: destinationAET || this.config.callingAET,
-      criteria: {
+      dataset: {
         '0020,000D': studyInstanceUID,
         ...(seriesInstanceUID && { '0020,000E': seriesInstanceUID }),
         ...(sopInstanceUID && { '0008,0018': sopInstanceUID }),
       }
     };
 
-    return this.sendDIMSECommand(command);
+    const response = await this.sendDIMSECommand(command);
+    return {
+       status: response.status === 0 ? 'success' : 'failed',
+       numberOfCompletedSubOperations: 0,
+       numberOfRemainingSubOperations: 0,
+       numberOfFailedSubOperations: 0,
+       numberOfWarningSubOperations: 0
+     };
   }
 
   async cGet(
@@ -203,35 +216,42 @@ export class DIMSEService {
     sopInstanceUID?: string
   ): Promise<DICOMInstance[]> {
     const command = {
-      type: 'C-GET',
-      criteria: {
+      commandType: 'C-GET' as const,
+      dataset: {
         '0020,000D': studyInstanceUID,
         ...(seriesInstanceUID && { '0020,000E': seriesInstanceUID }),
         ...(sopInstanceUID && { '0008,0018': sopInstanceUID }),
       }
     };
 
-    return this.sendDIMSECommand(command);
+    const response = await this.sendDIMSECommand(command);
+    // Convert DIMSE response to DICOMInstance array
+    return response.dataset ? [response.dataset as DICOMInstance] : [];
   }
 
   async cStore(dicomData: ArrayBuffer, sopInstanceUID: string): Promise<StoreResponse> {
     const command = {
-      type: 'C-STORE',
+      commandType: 'C-STORE' as const,
       sopInstanceUID,
       dicomData: Array.from(new Uint8Array(dicomData)),
     };
 
-    return this.sendDIMSECommand(command);
+    const response = await this.sendDIMSECommand(command);
+    return {
+      status: response.status === 0 ? 'success' : 'failed',
+      sopInstanceUID,
+      error: response.error
+    };
   }
 
   async cEcho(): Promise<boolean> {
     try {
       const command = {
-        type: 'C-ECHO'
+        commandType: 'C-ECHO' as const
       };
 
       const response = await this.sendDIMSECommand(command);
-      return response.status === 'SUCCESS';
+      return response.status === 0; // 0 indicates success in DICOM
     } catch (error) {
       console.error('C-ECHO failed:', error);
       return false;
@@ -294,7 +314,7 @@ export class DICOMNetworkService {
       for (const serie of series) {
         const seriesInstances = await this.dicomwebService.searchInstances(
           studyInstanceUID,
-          serie['0020000E'].Value[0]
+          (serie as Record<string, { Value: string[] }>)['0020000E'].Value[0]
         );
         instances.push(...seriesInstances);
       }
@@ -305,7 +325,7 @@ export class DICOMNetworkService {
     }
   }
 
-  async storeStudy(dicomFiles: File[], useDIMSE = false): Promise<StoreResponse | import('./dicomweb').StoreResponse> {
+  async storeStudy(dicomFiles: File[], useDIMSE = false): Promise<StoreResponse[] | import('./dicomweb').StoreResponse> {
     if (useDIMSE && this.dimseService) {
       const results = [];
       for (const file of dicomFiles) {

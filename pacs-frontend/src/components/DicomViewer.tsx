@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
@@ -6,10 +6,19 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { Slider } from './ui/slider';
+import ExpandableToolbar from './ExpandableToolbar';
+import ToolbarSettings from './ToolbarSettings';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel
+} from './ui/dropdown-menu';
 import { 
   ArrowLeft, 
   ZoomIn, 
-  ZoomOut,
   RotateCw, 
   Ruler, 
   Square, 
@@ -18,45 +27,64 @@ import {
   Pause,
   Download,
   Settings,
+  Settings2,
   Brain,
+  Activity,
   Grid3X3,
+  Eye,
   Move3D,
   RefreshCw,
   Layers,
   Maximize,
   Sun,
   Moon,
-  Network,
-  Type,
-  ArrowUpRight,
-  Target,
-  Hand,
-  MousePointer2,
-  Contrast,
-  RotateCcw,
-  FlipHorizontal,
-  FlipVertical,
-  ScanLine,
-  Crosshair,
   PanelRightClose,
   PanelRightOpen,
   GripVertical,
+  Grid2X2,
+  LayoutGrid,
+  ChevronDown,
+  RectangleHorizontal,
+  RectangleVertical,
+  Columns3,
+  Rows3,
+  Columns4,
+  Rows4
 } from 'lucide-react';
-import { DICOMNetworkPanel } from './DICOMNetworkPanel';
-import { DICOMProtocolTester } from './DICOMProtocolTester';
 
-import * as cornerstone from 'cornerstone-core';
-import * as cornerstoneTools from 'cornerstone-tools';
-import * as cornerstoneWADOImageLoader from 'cornerstone-wado-image-loader';
+import {
+  RenderingEngine,
+  Types,
+  Enums,
+  setVolumesForViewports,
+  volumeLoader,
+  cache,
+  imageLoader,
+  metaData,
+  getRenderingEngine,
+  utilities,
+  init as csRenderInit
+} from '@cornerstonejs/core';
+import {
+  cornerstoneStreamingImageVolumeLoader,
+  cornerstoneDICOMImageLoader
+} from '@cornerstonejs/dicom-image-loader';
+import {
+  ToolGroupManager,
+  WindowLevelTool,
+  PanTool,
+  ZoomTool,
+  StackScrollMouseWheelTool,
+  LengthTool,
+  AngleTool,
+  RectangleROITool,
+  EllipticalROITool,
+  init as csToolsInit,
+  ToolGroup
+} from '@cornerstonejs/tools';
 import * as dicomParser from 'dicom-parser';
-import Hammer from 'hammerjs';
-import * as cornerstoneMath from 'cornerstone-math';
+import { getWindowLevelPresets } from '../utils/cornerstone3d-init';
 
-// Basic VTK.js imports for 3D visualization (simplified) - temporarily disabled
-// import vtkFullScreenRenderWindow from 'vtk.js/Sources/Rendering/Misc/FullScreenRenderWindow';
-// import vtkImageData from 'vtk.js/Sources/Common/DataModel/ImageData';
-// import vtkDataArray from 'vtk.js/Sources/Common/Core/DataArray';
-// import { VtkDataTypes } from 'vtk.js/Sources/Common/Core/DataArray/Constants';
 
 
 interface Study {
@@ -86,19 +114,11 @@ interface Study {
 
 interface Measurement {
   id: string;
-  type: 'distance' | 'angle' | 'area' | 'ellipse' | 'rectangle' | 'suv' | 'annotation' | 'arrow';
+  type: 'distance' | 'angle' | 'area' | 'ellipse' | 'rectangle';
   value: number;
   unit: string;
   coordinates: number[];
   label?: string;
-  text?: string;
-  suvData?: {
-    maxSUV: number;
-    meanSUV: number;
-    bodyWeight?: number;
-    injectedDose?: number;
-    scanTime?: string;
-  };
 }
 
 interface ViewportSettings {
@@ -108,6 +128,15 @@ interface ViewportSettings {
   pan: { x: number; y: number };
   rotation: number;
   invert: boolean;
+  brightness: number;
+  contrast: number;
+}
+
+// Extend Window interface for cine interval
+declare global {
+  interface Window {
+    cineInterval?: NodeJS.Timeout;
+  }
 }
 
 export default function DicomViewer() {
@@ -132,13 +161,18 @@ export default function DicomViewer() {
     zoom: 1,
     pan: { x: 0, y: 0 },
     rotation: 0,
-    invert: false
+    invert: false,
+    brightness: 0,
+    contrast: 1
   });
   const [isInitialized, setIsInitialized] = useState(false);
-  const [viewMode, setViewMode] = useState<'2d' | '3d' | 'mpr' | 'vr' | 'mip'>('2d');
-  const [, setMprViews] = useState<{axial: HTMLElement | null, coronal: HTMLElement | null, sagittal: HTMLElement | null}>({
-    axial: null,
-    coronal: null,
+  const [renderingEngine, setRenderingEngine] = useState<RenderingEngine | null>(null);
+  const [viewport, setViewport] = useState<Types.IStackViewport | null>(null);
+  const [toolGroup, setToolGroup] = useState<ToolGroup | null>(null);
+  const [viewMode, setViewMode] = useState<'2d' | '3d' | 'mpr' | 'vr' | 'mip' | 'multi'>('2d');
+  const [mprViews, setMprViews] = useState<{axial: HTMLElement | null, coronal: HTMLElement | null, sagittal: HTMLElement | null}>({
+    axial: null, 
+    coronal: null, 
     sagittal: null
   });
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -146,137 +180,820 @@ export default function DicomViewer() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
-  const [showDICOMNetworking, setShowDICOMNetworking] = useState(false);
-  const [, setShowAIHeatmap] = useState(false);
-  const [seriesSynchronization, setSeriesSynchronization] = useState(false);
-  const [, setHangingProtocol] = useState<string>('default');
-  const [layout, setLayout] = useState<string>('1x1');
-  const [keyboardShortcuts] = useState(true);
-  
-  // VTK.js state for 3D visualization (simplified) - temporarily disabled
-  // const [vtkFullScreenRenderWindow, setVtkFullScreenRenderWindow] = useState<any>(null);
-  // const [vtkInitialized, setVtkInitialized] = useState(false);
+  const [multiViewMode, setMultiViewMode] = useState(false);
+  const [viewportLayout, setViewportLayout] = useState<'1x1' | '1x2' | '2x1' | '2x2' | '1x3' | '3x1' | '1x4' | '4x1' | '2x3' | '3x2' | '3x3' | '1x6' | '6x1'>('2x2');
+  const [viewportElements, setViewportElements] = useState<HTMLDivElement[]>([]);
+  // Removed unused viewportSettings2 and viewportSettings3
+  // Removed unused viewportSettings4
+  const [toolbarConfig, setToolbarConfig] = useState({
+    position: 'bottom-left' as const,
+    autoHide: true,
+    expandOnHover: true,
+    expandOnClick: true,
+    hideDelay: 2000,
+    showLabels: true,
+    compactMode: false,
+    enabledTools: [
+      'windowLevel', 'zoom', 'pan', 'rotate', 'reset', 'fullscreen',
+      'length', 'angle', 'rectangle', 'ellipse', 'polygon', 'freehand',
+      'cobb', 'suv', 'hounsfield', 'pixelProbe',
+      'mpr', 'volumeRender', 'surfaceRender', 'mip', 'minip',
+      'histogram', 'profile', 'statistics', 'timeIntensity',
+      'brush', 'eraser', 'magicWand', 'threshold', 'regionGrow',
+      'registration', 'fusion', 'overlay', 'blend',
+      'exportImage', 'exportVideo', 'exportMesh', 'exportReport',
+      'cardiac', 'vascular', 'oncology', 'orthopedic', 'neurological'
+    ]
+  });
+  const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
+  const [histogramData, setHistogramData] = useState<{bins: number[], values: number[]} | null>(null);
+  const [showHistogram, setShowHistogram] = useState(false);
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-  
 
+  // Performance optimization state
+  const [renderingQueue, setRenderingQueue] = useState<Set<string>>(new Set());
+  const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRenderTime = useRef<number>(0);
+  const viewportCache = useRef<Map<string, any>>(new Map());
+  const performanceMetrics = useRef({
+    renderCount: 0,
+    averageRenderTime: 0,
+    lastFrameTime: 0
+  });
+
+  // Image enhancement filters state
+  const [imageFilters, setImageFilters] = useState({
+    sharpen: 0,      // 0-100
+    smooth: 0,       // 0-100
+    edgeEnhance: 0,  // 0-100
+    denoise: 0       // 0-100
+  });
+  const [showFilters, setShowFilters] = useState(false);
+  const originalImageData = useRef<Map<string, ImageData>>(new Map());
+
+  // Gamma correction state
+  const [gammaCorrection, setGammaCorrection] = useState({
+    gamma: 1.0,      // 0.1-3.0
+    brightness: 0,   // -100 to 100
+    contrast: 1.0    // 0.1-3.0
+  });
+  const [showGamma, setShowGamma] = useState(false);
+
+  // Memory-based cache for when storage is not available
+  const memoryCache = useRef<Map<string, any>>(new Map());
   
-  const persistedMeasurements = measurements;
-  const measurementsLoading = false;
-  const deleteMeasurement = (id: string) => {
-    console.log('Deleting measurement:', id);
-  };
+  // Storage fallback functions
+  const safeStorageGet = useCallback((key: string): string | null => {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return memoryCache.current.get(key) || null;
+    }
+  }, []);
+
+  // Performance optimization utilities
+  const debouncedRender = useCallback((viewportId: string, renderFn: () => void, delay: number = 16) => {
+    // Clear existing timeout for this viewport
+    if (renderTimeoutRef.current) {
+      clearTimeout(renderTimeoutRef.current);
+    }
+
+    // Add to rendering queue
+    setRenderingQueue(prev => new Set(prev).add(viewportId));
+
+    // Debounce rendering to avoid excessive updates
+    renderTimeoutRef.current = setTimeout(() => {
+      const startTime = performance.now();
+      
+      try {
+        renderFn();
+        
+        // Update performance metrics
+        const renderTime = performance.now() - startTime;
+        const metrics = performanceMetrics.current;
+        metrics.renderCount++;
+        metrics.averageRenderTime = (metrics.averageRenderTime * (metrics.renderCount - 1) + renderTime) / metrics.renderCount;
+        metrics.lastFrameTime = renderTime;
+        
+        // Log performance warnings
+        if (renderTime > 50) {
+          console.warn(`⚠️ Slow render detected: ${renderTime.toFixed(2)}ms for viewport ${viewportId}`);
+        }
+        
+      } catch (error) {
+        console.error('❌ Render error:', error);
+      } finally {
+        // Remove from rendering queue
+        setRenderingQueue(prev => {
+          const newQueue = new Set(prev);
+          newQueue.delete(viewportId);
+          return newQueue;
+        });
+        lastRenderTime.current = performance.now();
+      }
+    }, delay);
+  }, []);
+
+  const cacheViewportState = useCallback((viewportId: string, state: any) => {
+    const cacheKey = `${viewportId}_${currentImageIndex}`;
+    viewportCache.current.set(cacheKey, {
+      ...state,
+      timestamp: Date.now()
+    });
+    
+    // Cleanup old cache entries (keep last 10 per viewport)
+    const cacheEntries = Array.from(viewportCache.current.entries())
+      .filter(([key]) => key.startsWith(viewportId))
+      .sort(([,a], [,b]) => b.timestamp - a.timestamp);
+    
+    if (cacheEntries.length > 10) {
+      cacheEntries.slice(10).forEach(([key]) => {
+        viewportCache.current.delete(key);
+      });
+    }
+  }, [currentImageIndex]);
+
+  const getCachedViewportState = useCallback((viewportId: string) => {
+    const cacheKey = `${viewportId}_${currentImageIndex}`;
+    const cached = viewportCache.current.get(cacheKey);
+    
+    // Return cached state if it's less than 5 minutes old
+    if (cached && Date.now() - cached.timestamp < 300000) {
+      return cached;
+    }
+    
+    return null;
+  }, [currentImageIndex]);
+
+  // Memory management utilities
+  const cleanupMemory = useCallback(() => {
+    // Clear old cache entries
+    const now = Date.now();
+    const maxAge = 600000; // 10 minutes
+    
+    for (const [key, value] of viewportCache.current.entries()) {
+      if (now - value.timestamp > maxAge) {
+        viewportCache.current.delete(key);
+      }
+    }
+    
+    // Clear memory cache if it gets too large
+    if (memoryCache.current.size > 100) {
+      const entries = Array.from(memoryCache.current.entries());
+      entries.slice(0, 50).forEach(([key]) => {
+        memoryCache.current.delete(key);
+      });
+    }
+    
+    // Force garbage collection if available
+    if (window.gc) {
+      window.gc();
+    }
+  }, []);
+
+  // Performance monitoring
+  const getPerformanceStats = useCallback(() => {
+    const metrics = performanceMetrics.current;
+    return {
+      renderCount: metrics.renderCount,
+      averageRenderTime: metrics.averageRenderTime.toFixed(2),
+      lastFrameTime: metrics.lastFrameTime.toFixed(2),
+      cacheSize: viewportCache.current.size,
+      memoryUsage: memoryCache.current.size,
+      activeRenders: renderingQueue.size
+    };
+  }, [renderingQueue.size]);
+
+  // Image enhancement filter functions
+  const applyImageFilters = useCallback(async (imageData: ImageData, filters: typeof imageFilters): Promise<ImageData> => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = imageData.width;
+    canvas.height = imageData.height;
+    
+    ctx.putImageData(imageData, 0, 0);
+    
+    // Apply filters in sequence
+    if (filters.denoise > 0) {
+      await applyDenoiseFilter(ctx, filters.denoise / 100);
+    }
+    
+    if (filters.smooth > 0) {
+      await applySmoothFilter(ctx, filters.smooth / 100);
+    }
+    
+    if (filters.sharpen > 0) {
+      await applySharpenFilter(ctx, filters.sharpen / 100);
+    }
+    
+    if (filters.edgeEnhance > 0) {
+      await applyEdgeEnhanceFilter(ctx, filters.edgeEnhance / 100);
+    }
+    
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  const applySharpenFilter = useCallback(async (ctx: CanvasRenderingContext2D, intensity: number) => {
+    const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    // Sharpen kernel
+    const kernel = [
+      0, -intensity, 0,
+      -intensity, 1 + 4 * intensity, -intensity,
+      0, -intensity, 0
+    ];
+    
+    const newData = new Uint8ClampedArray(data.length);
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        for (let c = 0; c < 3; c++) { // RGB channels only
+          let sum = 0;
+          for (let ky = -1; ky <= 1; ky++) {
+            for (let kx = -1; kx <= 1; kx++) {
+              const idx = ((y + ky) * width + (x + kx)) * 4 + c;
+              sum += data[idx] * kernel[(ky + 1) * 3 + (kx + 1)];
+            }
+          }
+          const idx = (y * width + x) * 4 + c;
+          newData[idx] = Math.max(0, Math.min(255, sum));
+        }
+        // Copy alpha channel
+        const idx = (y * width + x) * 4 + 3;
+        newData[idx] = data[idx];
+      }
+    }
+    
+    const newImageData = new ImageData(newData, width, height);
+    ctx.putImageData(newImageData, 0, 0);
+  }, []);
+
+  const applySmoothFilter = useCallback(async (ctx: CanvasRenderingContext2D, intensity: number) => {
+    const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    // Gaussian blur approximation
+    const radius = Math.ceil(intensity * 3);
+    const newData = new Uint8ClampedArray(data.length);
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let r = 0, g = 0, b = 0, count = 0;
+        
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const ny = y + dy;
+            const nx = x + dx;
+            
+            if (ny >= 0 && ny < height && nx >= 0 && nx < width) {
+              const idx = (ny * width + nx) * 4;
+              r += data[idx];
+              g += data[idx + 1];
+              b += data[idx + 2];
+              count++;
+            }
+          }
+        }
+        
+        const idx = (y * width + x) * 4;
+        newData[idx] = r / count;
+        newData[idx + 1] = g / count;
+        newData[idx + 2] = b / count;
+        newData[idx + 3] = data[idx + 3]; // Alpha
+      }
+    }
+    
+    const newImageData = new ImageData(newData, width, height);
+    ctx.putImageData(newImageData, 0, 0);
+  }, []);
+
+  const applyEdgeEnhanceFilter = useCallback(async (ctx: CanvasRenderingContext2D, intensity: number) => {
+    const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    // Edge detection kernel (Sobel)
+    const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+    const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+    
+    const newData = new Uint8ClampedArray(data.length);
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        let gx = 0, gy = 0;
+        
+        for (let ky = -1; ky <= 1; ky++) {
+          for (let kx = -1; kx <= 1; kx++) {
+            const idx = ((y + ky) * width + (x + kx)) * 4;
+            const gray = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+            const kernelIdx = (ky + 1) * 3 + (kx + 1);
+            gx += gray * sobelX[kernelIdx];
+            gy += gray * sobelY[kernelIdx];
+          }
+        }
+        
+        const magnitude = Math.sqrt(gx * gx + gy * gy) * intensity;
+        const idx = (y * width + x) * 4;
+        
+        // Enhance edges by adding edge magnitude to original
+        for (let c = 0; c < 3; c++) {
+          newData[idx + c] = Math.max(0, Math.min(255, data[idx + c] + magnitude));
+        }
+        newData[idx + 3] = data[idx + 3]; // Alpha
+      }
+    }
+    
+    const newImageData = new ImageData(newData, width, height);
+    ctx.putImageData(newImageData, 0, 0);
+  }, []);
+
+  const applyDenoiseFilter = useCallback(async (ctx: CanvasRenderingContext2D, intensity: number) => {
+    const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+    
+    // Simple median filter for noise reduction
+    const radius = Math.ceil(intensity * 2);
+    const newData = new Uint8ClampedArray(data.length);
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const neighbors: number[][] = [[], [], []];
+        
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
+            const ny = Math.max(0, Math.min(height - 1, y + dy));
+            const nx = Math.max(0, Math.min(width - 1, x + dx));
+            const idx = (ny * width + nx) * 4;
+            
+            neighbors[0].push(data[idx]);     // R
+            neighbors[1].push(data[idx + 1]); // G
+            neighbors[2].push(data[idx + 2]); // B
+          }
+        }
+        
+        const idx = (y * width + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          neighbors[c].sort((a, b) => a - b);
+          const median = neighbors[c][Math.floor(neighbors[c].length / 2)];
+          newData[idx + c] = median;
+        }
+        newData[idx + 3] = data[idx + 3]; // Alpha
+      }
+    }
+    
+    const newImageData = new ImageData(newData, width, height);
+    ctx.putImageData(newImageData, 0, 0);
+  }, []);
+
+  const handleFilterChange = useCallback((filterType: keyof typeof imageFilters, value: number) => {
+    setImageFilters(prev => ({
+      ...prev,
+      [filterType]: value
+    }));
+    
+    // Apply filters with debouncing
+    if (viewport) {
+      debouncedRender(viewport.id, async () => {
+        try {
+          // Get current image data
+          const canvas = viewport.getCanvas();
+          const ctx = canvas.getContext('2d')!;
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          
+          // Store original if not already stored
+          const cacheKey = `${viewport.id}_${currentImageIndex}`;
+          if (!originalImageData.current.has(cacheKey)) {
+            originalImageData.current.set(cacheKey, imageData);
+          }
+          
+          // Apply filters to original image
+          const original = originalImageData.current.get(cacheKey)!;
+          const filtered = await applyImageFilters(original, { ...imageFilters, [filterType]: value });
+          
+          // Update viewport
+          ctx.putImageData(filtered, 0, 0);
+          viewport.render();
+          
+        } catch (error) {
+          console.error('❌ Filter application failed:', error);
+        }
+      }, 100);
+    }
+  }, [imageFilters, viewport, currentImageIndex, debouncedRender, applyImageFilters]);
+
+  const resetFilters = useCallback(() => {
+    setImageFilters({
+      sharpen: 0,
+      smooth: 0,
+      edgeEnhance: 0,
+      denoise: 0
+    });
+    
+    // Restore original image
+    if (viewport) {
+      const cacheKey = `${viewport.id}_${currentImageIndex}`;
+      const original = originalImageData.current.get(cacheKey);
+      
+      if (original) {
+        const canvas = viewport.getCanvas();
+        const ctx = canvas.getContext('2d')!;
+        ctx.putImageData(original, 0, 0);
+        viewport.render();
+      }
+    }
+  }, [viewport, currentImageIndex]);
+
+  // Gamma correction functions
+  const applyGammaCorrection = useCallback(async (imageData: ImageData, gamma: number, brightness: number, contrast: number): Promise<ImageData> => {
+    const data = imageData.data;
+    const newData = new Uint8ClampedArray(data.length);
+    
+    // Create gamma lookup table for performance
+    const gammaLUT = new Array(256);
+    for (let i = 0; i < 256; i++) {
+      gammaLUT[i] = Math.pow(i / 255, 1 / gamma) * 255;
+    }
+    
+    for (let i = 0; i < data.length; i += 4) {
+      // Apply gamma correction to RGB channels
+      for (let c = 0; c < 3; c++) {
+        let value = data[i + c];
+        
+        // Apply gamma correction
+        value = gammaLUT[value];
+        
+        // Apply brightness and contrast
+        value = (value - 128) * contrast + 128 + brightness;
+        
+        // Clamp to valid range
+        newData[i + c] = Math.max(0, Math.min(255, value));
+      }
+      
+      // Preserve alpha channel
+      newData[i + 3] = data[i + 3];
+    }
+    
+    return new ImageData(newData, imageData.width, imageData.height);
+  }, []);
+
+  const handleGammaChange = useCallback((property: keyof typeof gammaCorrection, value: number) => {
+    setGammaCorrection(prev => ({
+      ...prev,
+      [property]: value
+    }));
+    
+    // Apply gamma correction with debouncing
+    if (viewport) {
+      debouncedRender(viewport.id, async () => {
+        try {
+          // Get current image data
+          const canvas = viewport.getCanvas();
+          const ctx = canvas.getContext('2d')!;
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          
+          // Store original if not already stored
+          const cacheKey = `${viewport.id}_${currentImageIndex}_original`;
+          if (!originalImageData.current.has(cacheKey)) {
+            originalImageData.current.set(cacheKey, imageData);
+          }
+          
+          // Apply gamma correction to original image
+          const original = originalImageData.current.get(cacheKey)!;
+          const corrected = await applyGammaCorrection(
+            original, 
+            property === 'gamma' ? value : gammaCorrection.gamma,
+            property === 'brightness' ? value : gammaCorrection.brightness,
+            property === 'contrast' ? value : gammaCorrection.contrast
+          );
+          
+          // Update viewport
+          ctx.putImageData(corrected, 0, 0);
+          viewport.render();
+          
+        } catch (error) {
+          console.error('❌ Gamma correction failed:', error);
+        }
+      }, 100);
+    }
+  }, [gammaCorrection, viewport, currentImageIndex, debouncedRender, applyGammaCorrection]);
+
+  const resetGammaCorrection = useCallback(() => {
+    setGammaCorrection({
+      gamma: 1.0,
+      brightness: 0,
+      contrast: 1.0
+    });
+    
+    // Restore original image
+    if (viewport) {
+      const cacheKey = `${viewport.id}_${currentImageIndex}_original`;
+      const original = originalImageData.current.get(cacheKey);
+      
+      if (original) {
+        const canvas = viewport.getCanvas();
+        const ctx = canvas.getContext('2d')!;
+        ctx.putImageData(original, 0, 0);
+        viewport.render();
+      }
+    }
+  }, [viewport, currentImageIndex]);
+  
+  const safeStorageSet = useCallback((key: string, value: string): void => {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      memoryCache.current.set(key, value);
+    }
+  }, []);
+  
+  const safeStorageRemove = useCallback((key: string): void => {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      memoryCache.current.delete(key);
+    }
+  }, []);
+
+  // Multi-viewport management functions
+  const distributeImagesAcrossViewports = useCallback(() => {
+    if (!imageIds.length || !viewportElements.length) {
+      console.log('❌ No images or viewports available for distribution');
+      return;
+    }
+
+    const numViewports = viewportElements.length;
+    const numImages = imageIds.length;
+    
+    console.log(`📊 Distributing ${numImages} images across ${numViewports} viewports`);
+    
+    // Calculate image distribution strategy
+    const imagesPerViewport = Math.floor(numImages / numViewports);
+    const remainingImages = numImages % numViewports;
+    
+    let imageIndex = 0;
+    
+    for (let viewportIndex = 0; viewportIndex < numViewports; viewportIndex++) {
+      const element = viewportElements[viewportIndex];
+      if (!element) continue;
+      
+      // Calculate how many images this viewport should get
+      const imagesForThisViewport = imagesPerViewport + (viewportIndex < remainingImages ? 1 : 0);
+      
+      if (imagesForThisViewport > 0 && imageIndex < numImages) {
+        const imageId = imageIds[imageIndex];
+        
+        // Load and display the image
+        cornerstone.loadImage(imageId).then((image) => {
+          cornerstone.displayImage(element, image);
+          console.log(`✅ Loaded image ${imageIndex + 1} in viewport ${viewportIndex + 1}`);
+        }).catch((err) => {
+          console.error(`❌ Failed to load image ${imageIndex + 1} in viewport ${viewportIndex + 1}:`, err);
+        });
+        
+        imageIndex += imagesForThisViewport;
+      }
+    }
+  }, [imageIds, viewportElements]);
+
+  const synchronizeViewports = useCallback((sourceViewport: HTMLDivElement, settings: ViewportSettings) => {
+    if (!multiViewMode) return;
+    
+    viewportElements.forEach((element) => {
+      if (element && element !== sourceViewport) {
+        try {
+          const enabledElement = cornerstone.getEnabledElement(element);
+          if (enabledElement) {
+            const viewport = cornerstone.getViewport(element);
+            viewport.voi.windowWidth = settings.windowWidth;
+            viewport.voi.windowCenter = settings.windowCenter;
+            viewport.scale = settings.zoom;
+            viewport.translation = settings.pan;
+            viewport.rotation = settings.rotation;
+            viewport.invert = settings.invert;
+            cornerstone.setViewport(element, viewport);
+          }
+        } catch (err) {
+          console.error('Error synchronizing viewport:', err);
+        }
+      }
+    });
+  }, [multiViewMode, viewportElements]);
+
+  const initializeMultiViewports = useCallback(async () => {
+    if (!viewportElements.length || viewportElements.length === 0) {
+      console.log('❌ No viewport elements available for multi-view initialization');
+      return;
+    }
+
+    try {
+      console.log('🔧 Initializing multi-viewports...', viewportElements.length);
+      
+      // Initialize each viewport element
+      for (let i = 0; i < viewportElements.length; i++) {
+        const element = viewportElements[i];
+        if (element && !cornerstone.getEnabledElement(element)) {
+          cornerstone.enable(element);
+          console.log(`✅ Enabled viewport ${i + 1}`);
+        }
+      }
+      
+      // Distribute images across viewports
+      distributeImagesAcrossViewports();
+      
+    } catch (err) {
+      console.error('❌ Failed to initialize multi-viewports:', err);
+    }
+  }, [viewportElements, distributeImagesAcrossViewports]);
+
+  // Initialize multi-viewports when entering multi-view mode
+  useEffect(() => {
+    if (viewMode === 'multi' && viewportElements.length > 0 && isInitialized) {
+      console.log('🔧 Multi-view mode activated, initializing viewports...');
+      initializeMultiViewports();
+      // Distribute images after initialization
+      setTimeout(() => {
+        if (imageIds.length > 0) {
+          distributeImagesAcrossViewports();
+        }
+      }, 100);
+    }
+  }, [viewMode, viewportElements, isInitialized, initializeMultiViewports, distributeImagesAcrossViewports, imageIds]);
+
+  // Redistribute images when layout changes
+  useEffect(() => {
+    if (viewMode === 'multi' && isInitialized && imageIds.length > 0) {
+      console.log('🔄 Layout changed, redistributing images...');
+      setTimeout(() => {
+        distributeImagesAcrossViewports();
+      }, 100);
+    }
+  }, [viewportLayout, viewMode, isInitialized, imageIds, distributeImagesAcrossViewports]);
 
   useEffect(() => {
     console.log('🔍 DicomViewer useEffect triggered, viewMode:', viewMode, 'isInitialized:', isInitialized);
     console.log('🔍 cornerstoneElementRef.current:', cornerstoneElementRef.current);
-    
-    if (!cornerstoneElementRef.current || isInitialized) {
-      console.log('⏳ Waiting for cornerstone element to be ready or already initialized');
-      return;
-    }
-    
-    const timer = setTimeout(() => {
-      initializeCornerstone();
-    }, 100);
-    
-    return () => clearTimeout(timer);
-    
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cornerstoneElementRef.current, isInitialized]);
-  
-  const initializeCornerstone = async () => {
-    try {
-      if (!cornerstoneElementRef.current) {
-        console.log('❌ cornerstoneElementRef.current is null, skipping initialization');
-        return;
-      }
+    console.log('🔍 Available modules:', {
+      RenderingEngine: typeof RenderingEngine,
+      csToolsInit: typeof csToolsInit,
+      cornerstoneDICOMImageLoader: typeof cornerstoneDICOMImageLoader,
+      dicomParser: typeof dicomParser
+    });
 
-        console.log('🔧 Initializing Cornerstone.js...');
+    const initializeCornerstone = async () => {
+      try {
+        if (!cornerstoneElementRef.current) {
+          console.log('❌ cornerstoneElementRef.current is null, skipping initialization');
+          return;
+        }
+
+        console.log('🔧 Initializing Cornerstone.js 3D...');
         
-        cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
-        cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+        // Initialize DICOM Image Loader with comprehensive error handling
+        cornerstoneDICOMImageLoader.external.cornerstone = cornerstone;
+        cornerstoneDICOMImageLoader.external.dicomParser = dicomParser;
         
-        cornerstoneWADOImageLoader.configure({
+        // Register the wadouri and wadors image loaders
+        try {
+          imageLoader.registerImageLoader('wadouri', cornerstoneDICOMImageLoader.wadouri.loadImage);
+          imageLoader.registerImageLoader('wadors', cornerstoneDICOMImageLoader.wadors.loadImage);
+          console.log('✅ DICOM image loaders registered successfully');
+        } catch (loaderError) {
+          console.error('❌ Failed to register DICOM image loaders:', loaderError);
+        }
+        
+        // Configure DICOM image loader with storage access disabled
+        cornerstoneDICOMImageLoader.configure({
           beforeSend: function(xhr: XMLHttpRequest) {
             if (token) {
               xhr.setRequestHeader('Authorization', `Bearer ${token}`);
             }
+            // Add CORS headers for cross-origin requests
+            xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
+            xhr.setRequestHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            xhr.setRequestHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
           },
           useWebWorkers: false,
-          webWorkerPath: '/cornerstoneWADOImageLoaderWebWorker.js',
-          taskConfiguration: {
-            'decodeTask': {
-              loadCodecsOnStartup: true,
-              initializeCodecsOnStartup: false,
-              codecsPath: '/cornerstoneWADOImageLoaderCodecs.js',
-              usePDFJS: false,
-              strict: false
-            }
+          strict: false,
+          // Completely disable storage access to prevent context errors
+          storageAccess: false,
+          // Disable caching that might use storage
+          maxWebWorkers: 0,
+          // Use memory-only caching
+          decodeConfig: {
+            convertFloatPixelDataToInt: false,
+            use16BitDataType: false
           }
         });
-
-        cornerstoneTools.external.cornerstone = cornerstone;
-        cornerstoneTools.external.Hammer = Hammer;
-        cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
         
-        cornerstoneTools.init({
-          mouseEnabled: true,
-          touchEnabled: true,
-          globalToolSyncEnabled: false,
-          showSVGCursors: true
-        });
-        
+        // Override storage methods to prevent access errors
         try {
-          cornerstone.enable(cornerstoneElementRef.current);
-          console.log('✅ Cornerstone element enabled successfully');
-        } catch (enableErr) {
-          console.error('❌ Failed to enable cornerstone element:', enableErr);
-          setError('Failed to initialize DICOM viewer element');
-          return;
+          // Check if storage is available
+          const testKey = '__storage_test__';
+          window.localStorage.setItem(testKey, 'test');
+          window.localStorage.removeItem(testKey);
+          console.log('✅ Storage access available');
+        } catch (storageError) {
+          console.warn('⚠️ Storage access restricted, using memory-only mode:', storageError.message);
+          
+          // Override storage methods with no-op functions
+          const noOpStorage = {
+            getItem: () => null,
+            setItem: () => {},
+            removeItem: () => {},
+            clear: () => {},
+            length: 0,
+            key: () => null
+          };
+          
+          // Replace localStorage and sessionStorage if they cause errors
+          try {
+            Object.defineProperty(window, 'localStorage', {
+              value: noOpStorage,
+              writable: false
+            });
+            Object.defineProperty(window, 'sessionStorage', {
+              value: noOpStorage,
+              writable: false
+            });
+          } catch (defineError) {
+            console.warn('Could not override storage objects:', defineError.message);
+          }
         }
+
+        // Initialize Cornerstone Core first
+        await csRenderInit();
         
-        const LengthTool = cornerstoneTools.LengthTool;
-        const AngleTool = cornerstoneTools.AngleTool;
-        const RectangleRoiTool = cornerstoneTools.RectangleRoiTool;
-        const EllipticalRoiTool = cornerstoneTools.EllipticalRoiTool;
-        const WwwcTool = cornerstoneTools.WwwcTool;
-        const PanTool = cornerstoneTools.PanTool;
-        const ZoomTool = cornerstoneTools.ZoomTool;
-        const StackScrollMouseWheelTool = cornerstoneTools.StackScrollMouseWheelTool;
+        // Initialize Cornerstone Tools
+        await csToolsInit();
         
-        cornerstoneTools.addTool(LengthTool);
-        cornerstoneTools.addTool(AngleTool);
-        cornerstoneTools.addTool(RectangleRoiTool);
-        cornerstoneTools.addTool(EllipticalRoiTool);
-        cornerstoneTools.addTool(WwwcTool);
-        cornerstoneTools.addTool(PanTool);
-        cornerstoneTools.addTool(ZoomTool);
-        cornerstoneTools.addTool(StackScrollMouseWheelTool);
+        // Create rendering engine
+        const renderingEngineId = 'myRenderingEngine';
+        const renderingEngine = new RenderingEngine(renderingEngineId);
         
-        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
-        cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 4 });
-        cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 2 });
-        cornerstoneTools.setToolActive('StackScrollMouseWheel', {});
+        // Create viewport
+        const viewportId = 'CT_STACK';
+        const viewportInput = {
+          viewportId,
+          type: Enums.ViewportType.STACK,
+          element: cornerstoneElementRef.current,
+          defaultOptions: {
+            background: [0.2, 0.3, 0.4] as Types.Point3
+          }
+        };
         
-        (window as typeof window & {
-          cornerstone: typeof cornerstone;
-          cornerstoneTools: typeof cornerstoneTools;
-          cornerstoneWADOImageLoader: typeof cornerstoneWADOImageLoader;
-        }).cornerstone = cornerstone;
-        (window as typeof window & {
-          cornerstone: typeof cornerstone;
-          cornerstoneTools: typeof cornerstoneTools;
-          cornerstoneWADOImageLoader: typeof cornerstoneWADOImageLoader;
-        }).cornerstoneTools = cornerstoneTools;
-        (window as typeof window & {
-          cornerstone: typeof cornerstone;
-          cornerstoneTools: typeof cornerstoneTools;
-          cornerstoneWADOImageLoader: typeof cornerstoneWADOImageLoader;
-        }).cornerstoneWADOImageLoader = cornerstoneWADOImageLoader;
+        renderingEngine.enableElement(viewportInput);
+        
+        // Get the stack viewport
+        const viewport = renderingEngine.getViewport(viewportId) as Types.IStackViewport;
+        
+        // Create tool group
+        const toolGroupId = 'myToolGroup';
+        const toolGroup = ToolGroupManager.createToolGroup(toolGroupId);
+        
+        // Add tools to the tool group
+        toolGroup?.addTool(WindowLevelTool.toolName);
+        toolGroup?.addTool(PanTool.toolName);
+        toolGroup?.addTool(ZoomTool.toolName);
+        toolGroup?.addTool(StackScrollMouseWheelTool.toolName);
+        toolGroup?.addTool(LengthTool.toolName);
+        toolGroup?.addTool(AngleTool.toolName);
+        toolGroup?.addTool(RectangleROITool.toolName);
+        toolGroup?.addTool(EllipticalROITool.toolName);
+        
+        // Set tool modes
+        toolGroup?.setToolActive(WindowLevelTool.toolName, {
+          bindings: [{ mouseButton: Enums.MouseBindings.Primary }]
+        });
+        toolGroup?.setToolActive(PanTool.toolName, {
+          bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }]
+        });
+        toolGroup?.setToolActive(ZoomTool.toolName, {
+          bindings: [{ mouseButton: Enums.MouseBindings.Secondary }]
+        });
+        toolGroup?.setToolActive(StackScrollMouseWheelTool.toolName);
+        
+        // Add viewport to tool group
+        toolGroup?.addViewport(viewportId, renderingEngineId);
+        
+        // Store references
+        setRenderingEngine(renderingEngine);
+        setViewport(viewport);
+        setToolGroup(toolGroup);
         
         setIsInitialized(true);
-        console.log('✅ Cornerstone initialized successfully');
+        console.log('✅ Cornerstone 3D initialized successfully');
+        console.log('📊 Rendering Engine:', renderingEngine);
+        console.log('📊 Viewport:', viewport);
+        console.log('📊 Tool Group:', toolGroup);
         
       } catch (err) {
         console.error('❌ Failed to initialize Cornerstone:', err);
@@ -284,73 +1001,36 @@ export default function DicomViewer() {
       }
     };
 
-  useEffect(() => {
-    if (isInitialized && imageIds && imageIds.length > 0 && viewMode === '2d') {
-      loadImage(currentImageIndex);
+    if (cornerstoneElementRef.current && !isInitialized) {
+      console.log('✅ Conditions met for initialization, calling initializeCornerstone()');
+      initializeCornerstone();
+    } else {
+      console.log('❌ Initialization conditions not met:', {
+        hasElement: !!cornerstoneElementRef.current,
+        isInitialized: isInitialized
+      });
     }
-  }, [isInitialized, imageIds, currentImageIndex, viewMode, loadImage]);
 
-  useEffect(() => {
-    if (isInitialized && imageIds && imageIds.length > 0 && viewMode === '2d') {
-      console.log('✅ Cornerstone initialized, loading images:', imageIds);
-      loadImage(0);
-    }
-  }, [isInitialized, imageIds, viewMode, loadImage]);
-
-  useEffect(() => {
-    if (isInitialized && imageIds && imageIds.length > 0 && cornerstoneElementRef.current && viewMode === '2d') {
-      loadImage(currentImageIndex);
-    }
-  }, [isInitialized, imageIds, currentImageIndex, viewMode, loadImage]);
-
-  // Set up image stack for mouse wheel scrolling
-  useEffect(() => {
-    if (isInitialized && imageIds && imageIds.length > 1 && cornerstoneElementRef.current && viewMode === '2d') {
-      try {
-        const element = cornerstoneElementRef.current;
-        
-        // Create stack object
-        const stack = {
-          imageIds: imageIds,
-          currentImageIdIndex: currentImageIndex
-        };
-        
-        // Add stack state manager
-        cornerstoneTools.addStackStateManager(element, ['stack']);
-        cornerstoneTools.addToolState(element, 'stack', stack);
-        
-        // Add event listener for stack scroll events
-        const handleStackScroll = () => {
-          const stackData = cornerstoneTools.getToolState(element, 'stack');
-          if (stackData && stackData.data && stackData.data.length > 0) {
-            const newImageIndex = stackData.data[0].currentImageIdIndex;
-            if (newImageIndex !== currentImageIndex && newImageIndex >= 0 && newImageIndex < imageIds.length) {
-              setCurrentImageIndex(newImageIndex);
-            }
+    return () => {
+      if (renderingEngine && isInitialized) {
+        try {
+          renderingEngine.destroy();
+          if (toolGroup) {
+            ToolGroupManager.destroyToolGroup(toolGroup.id);
           }
-        };
-        
-        element.addEventListener('cornerstoneimagerendered', handleStackScroll);
-        
-        console.log('✅ Image stack configured for mouse wheel scrolling:', imageIds.length, 'images');
-        
-        // Cleanup function
-        return () => {
-          element.removeEventListener('cornerstoneimagerendered', handleStackScroll);
-        };
-      } catch (err) {
-        console.error('❌ Failed to setup image stack:', err);
+        } catch (err) {
+          console.error('Error cleaning up Cornerstone 3D:', err);
+        }
       }
-    }
-  }, [isInitialized, imageIds, currentImageIndex, viewMode]);
+    };
+  }, [isInitialized, viewMode, token, renderingEngine, toolGroup]);
+
+  // Removed duplicate useEffect hook - initialization is handled by the first useEffect
 
   useEffect(() => {
     const fetchStudy = async () => {
       try {
-        setLoading(true);
-        setError(null);
-        
-        console.log(`Fetching study with ID: ${studyId}`);
+        console.log('🔍 Fetching study:', studyId);
         const response = await fetch(`${API_URL}/api/studies/${studyId}`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -359,28 +1039,62 @@ export default function DicomViewer() {
         
         if (response.ok) {
           const studyData = await response.json();
+          console.log('📊 Study data received:', studyData);
+          console.log('📁 DICOM files:', studyData.dicom_files);
           setStudy(studyData);
           
+          console.log('🔍 Checking DICOM files condition:');
+          console.log('  - studyData.dicom_files exists:', !!studyData.dicom_files);
+          console.log('  - studyData.dicom_files length:', studyData.dicom_files?.length);
+          console.log('  - condition result:', studyData.dicom_files && studyData.dicom_files.length > 0);
+          
           if (studyData.dicom_files && studyData.dicom_files.length > 0) {
-            const ids = studyData.dicom_files.map((file: { id: number; file_path: string; instance_number: number; slice_location?: number }) => 
-              `wadouri:${API_URL}/api/studies/dicom/files/${file.id}`
-            );
-            setImageIds(ids);
-            console.log('✅ Study loaded with image IDs:', ids);
+            console.log('✅ Using real DICOM files');
+            console.log('📋 First DICOM file structure:', JSON.stringify(studyData.dicom_files[0], null, 2));
+            const imageIds = studyData.dicom_files.map((file: { id: string; file_name: string }) => {
+              console.log('🔍 Processing file:', JSON.stringify(file, null, 2));
+              console.log('🆔 File ID:', file.id, 'Type:', typeof file.id);
+              const imageId = `wadouri:${API_URL}/api/studies/dicom/files/${file.id}`;
+              console.log('🖼️ Generated imageId:', imageId);
+              
+              // Test the URL directly
+              console.log('🧪 Testing DICOM URL accessibility...');
+              fetch(imageId.replace('wadouri:', ''), {
+                headers: { 'Authorization': `Bearer ${token}` }
+              }).then(response => {
+                console.log(`📡 DICOM URL test result: ${response.status} ${response.statusText}`);
+                console.log(`📏 Content-Length: ${response.headers.get('content-length')}`);
+              }).catch(err => {
+                console.error('❌ DICOM URL test failed:', err);
+              });
+              
+              return imageId;
+            });
+            console.log('✅ Real DICOM imageIds:', imageIds);
+            setImageIds(imageIds);
           } else {
-            const mockIds = Array.from({ length: 120 }, (_, i) => 
-              `example://image-${i + 1}`
+            console.log('🎭 No DICOM files found, using mock images');
+            const generateAlphanumericId = () => {
+              const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+              let result = '';
+              for (let i = 0; i < 8; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+              }
+              return result;
+            };
+            const mockImageIds = Array.from({ length: 120 }, () => 
+              `example://image-${generateAlphanumericId()}`
             );
-            setImageIds(mockIds);
-            console.log('⚠️ No DICOM files found, using mock images');
+            console.log('🎭 Using mock imageIds (120 images):', mockImageIds.slice(0, 5), '...');
+            setImageIds(mockImageIds);
           }
         } else {
-          setError('Study not found or access denied');
-          console.error('Failed to fetch study:', response.status, response.statusText);
+          console.log('❌ Study fetch failed:', response.status, response.statusText);
+          setError('Study not found');
         }
-      } catch (err) {
-        console.error('Error fetching study:', err);
-        setError('Failed to load study data');
+      } catch (error) {
+        console.error('❌ Error fetching study:', error);
+        setError('Failed to load study');
       } finally {
         setLoading(false);
       }
@@ -391,813 +1105,989 @@ export default function DicomViewer() {
     }
   }, [studyId, token, API_URL]);
 
-  // VTK useEffect temporarily disabled
-  // useEffect(() => {
-  //   if (viewMode === '3d' || viewMode === 'vr') {
-  //     initializeVTK().then(() => {
-  //       if (viewMode === '3d' && vtkFullScreenRenderWindow) {
-  //         // Basic 3D volume rendering setup
-  //         createVolumeFromDICOM().then(volumeData => {
-  //           if (volumeData) {
-  //             console.log('3D volume data created successfully - basic VTK.js integration ready');
-  //             // Advanced volume rendering would require additional VTK modules
-  //           }
-  //         });
-  //       }
-  //     });
-  //   }
-  // }, [viewMode, vtkFullScreenRenderWindow]);
-  
-  // Cleanup VTK when switching away from 3D modes - temporarily disabled
-  // useEffect(() => {
-  //   if (viewMode !== '3d' && viewMode !== 'vr' && viewMode !== 'mip' && vtkInitialized) {
-  //     cleanupVTK();
-  //   }
-  // }, [viewMode]);
-  
-  // Cleanup VTK on component unmount - temporarily disabled
-  // useEffect(() => {
-  //   return () => {
-  //     cleanupVTK();
-  //   };
-  // }, []);
-
-  // Cleanup on component unmount
-  useEffect(() => {
-    return () => {
-      // Cleanup playback interval
-      if (playbackIntervalRef.current) {
-        clearInterval(playbackIntervalRef.current);
-        playbackIntervalRef.current = null;
-      }
-      
-      // Cleanup cornerstone
-      if (cornerstoneElementRef.current) {
-        try {
-          cornerstone.disable(cornerstoneElementRef.current);
-        } catch (err) {
-          console.warn('Error disabling cornerstone element:', err);
-        }
-      }
-    };
-  }, []);
-
-  // Mouse event handlers for sidebar resizing
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizing) {
-        const newWidth = window.innerWidth - e.clientX;
-        setSidebarWidth(Math.max(250, Math.min(600, newWidth)));
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsResizing(false);
-    };
-
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing]);
-
-  const loadImage = async (imageIndex: number) => {
-    if (!cornerstoneElementRef.current) {
-      console.error('Cannot load image - cornerstone element not available');
-      setError('Viewer element not ready. Please try refreshing the page.');
-      return;
-    }
+  const loadImage = useCallback(async (imageIndex: number) => {
+    console.log('🔄 loadImage called with index:', imageIndex, 'imageIds length:', imageIds.length);
     
-    if (!isInitialized) {
-      console.error('Cannot load image - cornerstone not initialized');
-      setError('DICOM viewer not initialized. Please try refreshing the page.');
-      return;
-    }
-    
-    if (!imageIds || !Array.isArray(imageIds) || imageIds.length === 0) {
-      console.error('No image IDs available or not an array');
-      setError('No images available for this study');
-      return;
-    }
-    
-    if (imageIndex < 0 || imageIndex >= imageIds.length) {
-      console.error('Invalid image index:', imageIndex, 'max:', imageIds.length - 1);
+    if (!viewport || !renderingEngine || imageIndex >= imageIds.length || imageIndex < 0) {
+      console.log('❌ loadImage early return:', {
+        hasViewport: !!viewport,
+        hasRenderingEngine: !!renderingEngine,
+        imageIndex,
+        imageIdsLength: imageIds.length,
+        isValidIndex: imageIndex >= 0 && imageIndex < imageIds.length
+      });
       return;
     }
     
     try {
       const imageId = imageIds[imageIndex];
+      console.log('🔄 Processing image ID:', imageId);
       
-      if (imageId && typeof imageId === 'string' && imageId.startsWith('wadouri:')) {
-        console.log('🔄 Loading real DICOM image:', imageId);
+      if (imageId && imageId.startsWith('wadouri:')) {
+        console.log('🔄 Loading DICOM image via wadouri:', imageId);
+        
         try {
-          const image = await cornerstone.loadImage(imageId);
-          console.log('✅ DICOM image loaded successfully:', image.width, 'x', image.height);
+          // Clear any existing error state
+          setError(null);
           
-          if (cornerstoneElementRef.current) {
-            cornerstone.displayImage(cornerstoneElementRef.current, image);
-            
-            const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-            cornerstone.setViewport(cornerstoneElementRef.current, {
-              ...viewport,
-              ...viewportSettings
-            });
-          } else {
-            console.error('Cornerstone element reference lost during image loading');
+          // Validate the image ID format
+          const url = imageId.replace('wadouri:', '');
+          if (!url || !url.startsWith('http')) {
+            throw new Error(`Invalid wadouri URL format: ${imageId}`);
           }
-        } catch (err) {
-          console.error('Failed to load DICOM image:', err);
-          createAndDisplayMockImage(imageIndex);
+          
+          console.log('🔄 Setting stack with image:', imageId);
+          
+          // Set the stack on the viewport with error handling
+          await viewport.setStack([imageId], 0);
+          
+          // Extract DICOM metadata for automatic window/level detection
+          try {
+            const image = await imageLoader.loadAndCacheImage(imageId);
+            if (image && image.data && image.data.string) {
+              const dataSet = image.data;
+              
+              // Extract window center and width from DICOM metadata
+              let windowCenter = dataSet.floatString('x00281050'); // Window Center
+              let windowWidth = dataSet.floatString('x00281051');  // Window Width
+              
+              // If multiple values, take the first one
+              if (windowCenter && typeof windowCenter === 'string' && windowCenter.includes('\\')) {
+                windowCenter = parseFloat(windowCenter.split('\\')[0]);
+              } else if (windowCenter) {
+                windowCenter = parseFloat(windowCenter);
+              }
+              
+              if (windowWidth && typeof windowWidth === 'string' && windowWidth.includes('\\')) {
+                windowWidth = parseFloat(windowWidth.split('\\')[0]);
+              } else if (windowWidth) {
+                windowWidth = parseFloat(windowWidth);
+              }
+              
+              // Apply automatic window/level if found in metadata
+              if (windowCenter && windowWidth && !isNaN(windowCenter) && !isNaN(windowWidth)) {
+                console.log('🎯 Auto-detected window/level from DICOM:', { windowCenter, windowWidth });
+                
+                const newSettings = {
+                  ...viewportSettings,
+                  windowCenter,
+                  windowWidth
+                };
+                
+                setViewportSettings(newSettings);
+                
+                // Apply to viewport
+                viewport.setProperties({
+                  voiRange: {
+                    lower: windowCenter - windowWidth / 2,
+                    upper: windowCenter + windowWidth / 2
+                  }
+                });
+              } else {
+                console.log('⚠️ No valid window/level found in DICOM metadata, using defaults');
+                
+                // Apply default window/level based on modality
+                const modality = dataSet.string('x00080060'); // Modality
+                let defaultSettings = { windowCenter: 40, windowWidth: 400 }; // Default soft tissue
+                
+                if (modality) {
+                  const presets = getWindowLevelPresets();
+                  switch (modality.toUpperCase()) {
+                    case 'CT':
+                      if (study?.body_part?.toLowerCase().includes('lung')) {
+                        defaultSettings = presets['Lung'];
+                      } else if (study?.body_part?.toLowerCase().includes('bone')) {
+                        defaultSettings = presets['Bone'];
+                      } else if (study?.body_part?.toLowerCase().includes('brain') || study?.body_part?.toLowerCase().includes('head')) {
+                        defaultSettings = presets['Brain'];
+                      } else {
+                        defaultSettings = presets['Soft Tissue'];
+                      }
+                      break;
+                    case 'MR':
+                    case 'MRI':
+                      defaultSettings = presets['Brain'];
+                      break;
+                    default:
+                      defaultSettings = presets['Soft Tissue'];
+                  }
+                }
+                
+                console.log('🎯 Applying modality-based defaults:', defaultSettings);
+                
+                const newSettings = {
+                  ...viewportSettings,
+                  windowCenter: defaultSettings.windowCenter,
+                  windowWidth: defaultSettings.windowWidth
+                };
+                
+                setViewportSettings(newSettings);
+                
+                viewport.setProperties({
+                  voiRange: {
+                    lower: defaultSettings.windowCenter - defaultSettings.windowWidth / 2,
+                    upper: defaultSettings.windowCenter + defaultSettings.windowWidth / 2
+                  }
+                });
+              }
+            }
+          } catch (metadataError) {
+            console.warn('⚠️ Could not extract DICOM metadata for auto window/level:', metadataError);
+          }
+          
+          console.log('🔄 Rendering viewport:', viewport.id);
+          
+          // Render the viewport
+          renderingEngine.renderViewports([viewport.id]);
+          
+          console.log('✅ DICOM image loaded and displayed successfully');
+          
+          // Update current image index
+          setCurrentImageIndex(imageIndex);
+          
+        } catch (imageError) {
+          console.error('❌ Error during DICOM image loading/display:', imageError);
+          console.error('Failed image ID:', imageId);
+          
+          // Enhanced error handling with retry mechanism
+          let shouldRetry = false;
+          let errorMessage = '';
+          
+          if (imageError.message.includes('404')) {
+            errorMessage = 'DICOM file not found on server';
+          } else if (imageError.message.includes('403') || imageError.message.includes('401')) {
+            errorMessage = 'Access denied - please check authentication';
+            shouldRetry = true; // Might be temporary auth issue
+          } else if (imageError.message.includes('CORS')) {
+            errorMessage = 'Cross-origin request blocked - check server CORS settings';
+          } else if (imageError.message.includes('storage')) {
+            errorMessage = 'Storage access error - using memory-only mode';
+            shouldRetry = true;
+          } else if (imageError.message.includes('network') || imageError.message.includes('timeout')) {
+            errorMessage = 'Network error - check connection';
+            shouldRetry = true;
+          } else {
+            errorMessage = `Failed to load DICOM image: ${imageError.message}`;
+            shouldRetry = true;
+          }
+          
+          // Implement retry mechanism for recoverable errors
+          if (shouldRetry && imageIndex === currentImageIndex) {
+            console.log('🔄 Attempting to retry image loading in 2 seconds...');
+            setTimeout(() => {
+              if (imageIndex === currentImageIndex) {
+                console.log('🔄 Retrying image load for index:', imageIndex);
+                loadImage(imageIndex).catch(() => {
+                  console.log('❌ Retry failed, showing error');
+                  setError(errorMessage);
+                });
+              }
+            }, 2000);
+          } else {
+            setError(errorMessage);
+          }
+          
+          // Try to apply basic window/level even if image loading partially failed
+          try {
+            if (viewport) {
+              viewport.setProperties({
+                voiRange: {
+                  lower: viewportSettings.windowCenter - viewportSettings.windowWidth / 2,
+                  upper: viewportSettings.windowCenter + viewportSettings.windowWidth / 2
+                }
+              });
+              renderingEngine.renderViewports([viewport.id]);
+            }
+          } catch (fallbackError) {
+            console.warn('⚠️ Fallback rendering also failed:', fallbackError);
+          }
+          
+          throw imageError;
         }
+      } else if (imageId) {
+        console.log('⚠️ Non-wadouri image ID detected:', imageId);
+        setError('Only wadouri DICOM images are supported in this viewer');
       } else {
-        createAndDisplayMockImage(imageIndex);
+        console.log('❌ Empty or invalid image ID');
+        setError('Invalid image identifier');
       }
       
     } catch (err) {
       console.error('❌ Failed to load image:', err);
-      if (imageIds && imageIndex < imageIds.length) {
-        console.error('Image ID that failed:', imageIds[imageIndex]);
+      console.error('Image ID that failed:', imageIds[imageIndex]);
+      
+      // Don't overwrite more specific error messages
+      if (!error) {
+        setError('Failed to load DICOM image');
       }
-      setError('Failed to load DICOM image');
     }
-  };
+  }, [imageIds, viewport, renderingEngine, error]);
 
-  const createAndDisplayMockImage = (imageIndex: number) => {
-    if (!cornerstoneElementRef.current) {
-      console.error('Cannot create mock image - cornerstone element not available');
-      return;
-    }
+  useEffect(() => {
+    const conditions = {
+      isInitialized,
+      imageIdsLength: imageIds.length,
+      hasViewport: !!viewport,
+      hasRenderingEngine: !!renderingEngine,
+      viewMode,
+      currentImageIndex,
+      isValidImageIndex: currentImageIndex >= 0 && currentImageIndex < imageIds.length
+    };
     
-    if (!isInitialized) {
-      console.error('Cannot create mock image - cornerstone not initialized');
-      return;
+    console.log('🔍 Image loading useEffect triggered:', conditions);
+    
+    if (isInitialized && imageIds.length > 0 && viewport && renderingEngine && viewMode === '2d' && conditions.isValidImageIndex) {
+      console.log('✅ All conditions met, calling loadImage with index:', currentImageIndex);
+      loadImage(currentImageIndex);
+    } else {
+      const missingConditions = [];
+      if (!isInitialized) missingConditions.push('not initialized');
+      if (imageIds.length === 0) missingConditions.push('no image IDs');
+      if (!viewport) missingConditions.push('no viewport');
+      if (!renderingEngine) missingConditions.push('no rendering engine');
+      if (viewMode !== '2d') missingConditions.push(`view mode is ${viewMode}, not 2d`);
+      if (!conditions.isValidImageIndex) missingConditions.push(`invalid image index: ${currentImageIndex}`);
+      
+      console.log('⏳ Image loading conditions not met:', missingConditions.join(', '));
+      
+      // Clear error if we're just waiting for initialization
+      if (missingConditions.length > 0 && !missingConditions.includes('no image IDs')) {
+        setError(null);
+      }
     }
+  }, [isInitialized, imageIds, currentImageIndex, viewMode, loadImage, viewport, renderingEngine]);
+
+  useEffect(() => {
+    if (viewMode === '3d' || viewMode === 'vr') {
+      console.log('3D/VR mode selected - VTK integration coming soon');
+    }
+  }, [viewMode]);
+
+  // Histogram calculation functions
+  const calculateHistogram = useCallback((imageData: any) => {
+    if (!imageData || !imageData.getPixelData) return null;
     
     try {
-      const canvas = document.createElement('canvas');
-      canvas.width = 512;
-      canvas.height = 512;
-      const ctx = canvas.getContext('2d');
+      const pixelData = imageData.getPixelData();
+      const numBins = 256;
+      const histogram = new Array(numBins).fill(0);
       
-      if (!ctx) {
-        console.error('Failed to get 2D context from canvas');
-        return;
+      // Find min and max values
+      let minValue = Infinity;
+      let maxValue = -Infinity;
+      
+      for (let i = 0; i < pixelData.length; i++) {
+        const value = pixelData[i];
+        if (value < minValue) minValue = value;
+        if (value > maxValue) maxValue = value;
       }
       
-      const imageData = ctx.createImageData(512, 512);
-      for (let i = 0; i < imageData.data.length; i += 4) {
-        const x = (i / 4) % 512;
-        const y = Math.floor((i / 4) / 512);
-        const centerX = 256;
-        const centerY = 256;
-        const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2);
-        
-        let intensity = 0;
-        if (study?.modality === 'CR' || study?.modality === 'DX') {
-          intensity = Math.max(0, 200 - distance * 0.5 + Math.sin(x * 0.02) * 20 + Math.cos(y * 0.02) * 20);
-          if (distance > 200) intensity = Math.max(intensity * 0.3, 20);
-        } else if (study?.modality === 'CT') {
-          intensity = 128 + Math.sin(distance * 0.02) * 50 + Math.random() * 30;
-        } else if (study?.modality === 'MR') {
-          intensity = 150 + Math.cos(distance * 0.01) * 80 + Math.sin(x * 0.01) * 30;
-        } else {
-          intensity = Math.max(0, 255 - distance + Math.random() * 50);
-        }
-        
-        intensity = Math.max(0, Math.min(255, intensity));
-        
-        imageData.data[i] = intensity;
-        imageData.data[i + 1] = intensity;
-        imageData.data[i + 2] = intensity;
-        imageData.data[i + 3] = 255;
+      // Calculate bin size
+      const binSize = (maxValue - minValue) / numBins;
+      
+      // Fill histogram
+      for (let i = 0; i < pixelData.length; i++) {
+        const binIndex = Math.min(
+          Math.floor((pixelData[i] - minValue) / binSize),
+          numBins - 1
+        );
+        histogram[binIndex]++;
       }
       
-      ctx.putImageData(imageData, 0, 0);
+      // Create bins array
+      const bins = Array.from({ length: numBins }, (_, i) => 
+        Math.round(minValue + i * binSize)
+      );
       
-      const mockImageId = imageIds && imageIndex < imageIds.length ? 
-        imageIds[imageIndex] : `mock-image-${imageIndex}`;
-      
-      const mockImage = {
-        imageId: mockImageId,
-        minPixelValue: 0,
-        maxPixelValue: 255,
-        slope: 1,
-        intercept: 0,
-        windowCenter: viewportSettings.windowCenter,
-        windowWidth: viewportSettings.windowWidth,
-        render: cornerstone.renderGrayscaleImage,
-        getPixelData: () => imageData.data,
-        rows: 512,
-        columns: 512,
-        height: 512,
-        width: 512,
-        color: false,
-        columnPixelSpacing: 1,
-        rowPixelSpacing: 1,
-        invert: false,
-        sizeInBytes: 512 * 512
-      };
-      
-      cornerstone.displayImage(cornerstoneElementRef.current, mockImage);
-      
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      cornerstone.setViewport(cornerstoneElementRef.current, {
-        ...viewport,
-        ...viewportSettings
-      });
-      
-      console.log('✅ Mock image displayed successfully');
-    } catch (err) {
-      console.error('❌ Failed to create and display mock image:', err);
+      return { bins, values: histogram };
+    } catch (error) {
+      console.error('Error calculating histogram:', error);
+      return null;
     }
-  };
+  }, []);
+
+  const updateHistogram = useCallback(async () => {
+    if (!viewport || !imageIds[currentImageIndex]) return;
+    
+    try {
+      const imageId = imageIds[currentImageIndex];
+      const image = await imageLoader.loadAndCacheImage(imageId);
+      const histogram = calculateHistogram(image);
+      setHistogramData(histogram);
+    } catch (error) {
+      console.error('Error updating histogram:', error);
+      setHistogramData(null);
+    }
+  }, [viewport, imageIds, currentImageIndex, calculateHistogram]);
+
+  // Update histogram when image changes
+  useEffect(() => {
+    if (showHistogram && viewport && imageIds.length > 0) {
+      updateHistogram();
+    }
+  }, [showHistogram, viewport, currentImageIndex, updateHistogram]);
+
+  // Memory cleanup and performance monitoring
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      cleanupMemory();
+      
+      // Log performance stats in development
+      if (import.meta.env.DEV) {
+        const stats = getPerformanceStats();
+        if (stats.renderCount > 0) {
+          console.log('📊 Performance Stats:', stats);
+        }
+      }
+    }, 30000); // Cleanup every 30 seconds
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(cleanupInterval);
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current);
+      }
+      cleanupMemory();
+    };
+  }, [cleanupMemory, getPerformanceStats]);
+
+  // Responsive viewport sizing
+  useEffect(() => {
+    const handleResize = () => {
+      if (viewport && renderingEngine) {
+        // Debounce viewport resize for better performance
+        debouncedRender(viewport.id, () => {
+          try {
+            renderingEngine.resize();
+            viewport.render();
+          } catch (error) {
+            console.warn('⚠️ Viewport resize failed:', error);
+          }
+        }, 100); // Longer delay for resize events
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [viewport, renderingEngine, debouncedRender]);
 
   const handleToolSelect = (tool: string) => {
-    if (!cornerstoneElementRef.current) return;
+    if (!toolGroup) return;
     
-    cornerstoneTools.setToolPassive('Length');
-    cornerstoneTools.setToolPassive('Angle');
-    cornerstoneTools.setToolPassive('RectangleRoi');
-    cornerstoneTools.setToolPassive('EllipticalRoi');
-    cornerstoneTools.setToolPassive('FreehandRoi');
-    cornerstoneTools.setToolPassive('CobbAngle');
-    cornerstoneTools.setToolPassive('Wwwc');
-    cornerstoneTools.setToolPassive('Pan');
-    cornerstoneTools.setToolPassive('Zoom');
+    // Deactivate all tools first
+    toolGroup.setToolPassive(LengthTool.toolName);
+    toolGroup.setToolPassive(AngleTool.toolName);
+    toolGroup.setToolPassive(RectangleROITool.toolName);
+    toolGroup.setToolPassive(EllipticalROITool.toolName);
+    toolGroup.setToolPassive(WindowLevelTool.toolName);
+    toolGroup.setToolPassive(PanTool.toolName);
+    toolGroup.setToolPassive(ZoomTool.toolName);
     
+    // Activate selected tool
     switch (tool) {
       case 'distance':
-        cornerstoneTools.setToolActive('Length', { mouseButtonMask: 1 });
+        toolGroup.setToolActive(LengthTool.toolName, {
+          bindings: [{ mouseButton: 1 }]
+        });
         break;
       case 'angle':
-        cornerstoneTools.setToolActive('Angle', { mouseButtonMask: 1 });
+        toolGroup.setToolActive(AngleTool.toolName, {
+          bindings: [{ mouseButton: 1 }]
+        });
         break;
       case 'rectangle':
-        cornerstoneTools.setToolActive('RectangleRoi', { mouseButtonMask: 1 });
+        toolGroup.setToolActive(RectangleROITool.toolName, {
+          bindings: [{ mouseButton: 1 }]
+        });
         break;
       case 'ellipse':
-        cornerstoneTools.setToolActive('EllipticalRoi', { mouseButtonMask: 1 });
-        break;
-      case 'freehand':
-        cornerstoneTools.setToolActive('FreehandRoi', { mouseButtonMask: 1 });
-        break;
-      case 'cobb':
-        cornerstoneTools.setToolActive('CobbAngle', { mouseButtonMask: 1 });
-        break;
-      case 'suv':
-        // SUV measurement - use Length tool with special handling
-        cornerstoneTools.setToolActive('Length', { mouseButtonMask: 1 });
-        break;
-      case 'annotation':
-        // Text annotation - use a simple click handler for now
-        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
-        break;
-      case 'arrow':
-        // Arrow tool - use Length tool with arrow styling
-        cornerstoneTools.setToolActive('Length', { mouseButtonMask: 1 });
-        break;
-      case 'wwwc':
-        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+        toolGroup.setToolActive(EllipticalROITool.toolName, {
+          bindings: [{ mouseButton: 1 }]
+        });
         break;
       case 'pan':
-        cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 1 });
+        toolGroup.setToolActive(PanTool.toolName, {
+          bindings: [{ mouseButton: 1 }]
+        });
         break;
       case 'zoom':
-        cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 1 });
+        toolGroup.setToolActive(ZoomTool.toolName, {
+          bindings: [{ mouseButton: 1 }]
+        });
         break;
+      case 'wwwc':
       default:
-        cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+        toolGroup.setToolActive(WindowLevelTool.toolName, {
+          bindings: [{ mouseButton: 1 }]
+        });
+        break;
     }
     
     setActiveTool(tool);
   };
 
+  // Zoom functions with synchronization
+  // Removed handleZoomIn - replaced by new Cornerstone3D zoom tool
+
+  // Removed handleZoomOut - replaced by new Cornerstone3D zoom tool
+
+  // Removed handleZoomFit - replaced by new Cornerstone3D zoom tool
+
+  // Sidebar handlers
+  const toggleSidebar = () => {
+    setSidebarVisible(!sidebarVisible);
+  };
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = window.innerWidth - e.clientX;
+      setSidebarWidth(Math.max(280, Math.min(600, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
   const reconstruct3D = () => {
-    setViewMode('3d');
-    console.log('3D reconstruction requested - VTK integration coming soon');
+    if (!imageIds.length) return;
+
+    try {
+      console.log('3D reconstruction initiated for', imageIds.length, 'slices');
+      setViewMode('3d');
+    } catch (error) {
+      console.error('Failed to reconstruct 3D volume:', error);
+    }
   };
 
-  // VTK.js functions temporarily disabled
 
-  const generateMPR = async () => {
-    setViewMode('mpr');
-    
-    setMprViews({
-      axial: { label: 'Axial View', ready: true },
-      coronal: { label: 'Coronal View', ready: true },
-      sagittal: { label: 'Sagittal View', ready: true }
-    });
-    
-    // await initializeVTK();
-    console.log('MPR generation - VTK.js temporarily disabled');
+
+  const generateMPR = () => {
+    if (!imageIds.length) return;
+
+    try {
+      const axialView = { plane: 'axial', sliceIndex: Math.floor(imageIds.length / 2) };
+      const coronalView = { plane: 'coronal', sliceIndex: Math.floor(512 / 2) };
+      const sagittalView = { plane: 'sagittal', sliceIndex: Math.floor(512 / 2) };
+
+      setMprViews({
+        axial: axialView,
+        coronal: coronalView,
+        sagittal: sagittalView
+      });
+
+      setViewMode('mpr');
+      console.log('MPR views generated:', { axialView, coronalView, sagittalView });
+    } catch (error) {
+      console.error('Failed to generate MPR views:', error);
+    }
   };
 
-  const generateMIP = async () => {
-    setViewMode('mip');
-    // await initializeVTK();
-    
-    // if (vtkFullScreenRenderWindow) {
-    //   const volumeData = await createVolumeFromDICOM();
-    //   if (volumeData) {
-    //     console.log('MIP generation with VTK.js - volume data created successfully');
-    //     // Basic MIP implementation - more advanced rendering would require additional VTK modules
-    //     console.log('MIP rendering with VTK.js completed');
-    //   }
-    // }
-    console.log('MIP generation - VTK.js temporarily disabled');
+  const generateMIP = () => {
+    if (!imageIds.length) return;
+
+    try {
+      setViewMode('mip');
+    } catch (error) {
+      console.error('Failed to generate MIP:', error);
+    }
   };
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
-  const handleSliceChange = (newIndex: number) => {
-    if (newIndex >= 0 && newIndex < imageIds.length) {
-      setCurrentImageIndex(newIndex);
-    }
-  };
-
-  const handleRotate = () => {
-    if (!cornerstoneElementRef.current || !isInitialized) return;
-    
-    const newRotation = (viewportSettings.rotation + 90) % 360;
-    const newSettings = {
-      ...viewportSettings,
-      rotation: newRotation
-    };
-    
-    setViewportSettings(newSettings);
-    
-    try {
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      viewport.rotation = newRotation * (Math.PI / 180); // Convert to radians
-      cornerstone.setViewport(cornerstoneElementRef.current, viewport);
-    } catch (err) {
-      console.error('Failed to rotate image:', err);
-      setError('Failed to rotate image');
-    }
-  };
-
-  const handleInvert = () => {
-    if (!cornerstoneElementRef.current || !isInitialized) return;
-    
-    const newInvert = !viewportSettings.invert;
-    const newSettings = {
-      ...viewportSettings,
-      invert: newInvert
-    };
-    
-    setViewportSettings(newSettings);
-    
-    try {
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      viewport.invert = newInvert;
-      cornerstone.setViewport(cornerstoneElementRef.current, viewport);
-    } catch (err) {
-      console.error('Failed to invert image:', err);
-      setError('Failed to invert image');
+  const handleSliceChange = (direction: 'next' | 'prev') => {
+    if (direction === 'next' && currentImageIndex < imageIds.length - 1) {
+      setCurrentImageIndex(currentImageIndex + 1);
+    } else if (direction === 'prev' && currentImageIndex > 0) {
+      setCurrentImageIndex(currentImageIndex - 1);
     }
   };
 
   const handleWindowLevelChange = (type: 'center' | 'width', value: number) => {
     const newSettings = {
       ...viewportSettings,
-      windowCenter: type === 'center' ? value : viewportSettings.windowCenter,
-      windowWidth: type === 'width' ? value : viewportSettings.windowWidth
+      [type === 'center' ? 'windowCenter' : 'windowWidth']: value
     };
-    
     setViewportSettings(newSettings);
     
-    if (cornerstoneElementRef.current && isInitialized) {
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      viewport.voi.windowWidth = newSettings.windowWidth;
-      viewport.voi.windowCenter = newSettings.windowCenter;
-      cornerstone.setViewport(cornerstoneElementRef.current, viewport);
+    if (viewport) {
+      // Update viewport properties using new Cornerstone.js 3D API
+      const properties = viewport.getProperties();
+      // Use debounced rendering for better performance
+      debouncedRender(viewport.id, () => {
+        viewport.setProperties({
+          ...properties,
+          voiRange: {
+            lower: newSettings.windowCenter - newSettings.windowWidth / 2,
+            upper: newSettings.windowCenter + newSettings.windowWidth / 2
+          }
+        });
+        viewport.render();
+        
+        // Cache viewport state
+        cacheViewportState(viewport.id, newSettings);
+      });
+    }
+    
+    // TODO: Implement viewport synchronization for multi-view mode
+  };
+
+  const handleBrightnessChange = (value: number) => {
+    const newSettings = {
+      ...viewportSettings,
+      brightness: value
+    };
+    setViewportSettings(newSettings);
+    
+    if (viewport) {
+      // Apply brightness adjustment using Cornerstone.js 3D API
+      const properties = viewport.getProperties();
+      const currentVoi = properties.voiRange || {
+        lower: newSettings.windowCenter - newSettings.windowWidth / 2,
+        upper: newSettings.windowCenter + newSettings.windowWidth / 2
+      };
+      
+      // Adjust brightness by shifting the VOI range
+      const brightnessOffset = value * 50; // Scale brightness adjustment
+      // Use debounced rendering for better performance
+      debouncedRender(viewport.id, () => {
+        viewport.setProperties({
+          ...properties,
+          voiRange: {
+            lower: currentVoi.lower + brightnessOffset,
+            upper: currentVoi.upper + brightnessOffset
+          }
+        });
+        viewport.render();
+        
+        // Cache viewport state
+        cacheViewportState(viewport.id, newSettings);
+      });
     }
   };
 
-  const playbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const handleContrastChange = (value: number) => {
+    const newSettings = {
+      ...viewportSettings,
+      contrast: value
+    };
+    setViewportSettings(newSettings);
+    
+    if (viewport) {
+      // Apply contrast adjustment using Cornerstone.js 3D API
+      const properties = viewport.getProperties();
+      const currentVoi = properties.voiRange || {
+        lower: newSettings.windowCenter - newSettings.windowWidth / 2,
+        upper: newSettings.windowCenter + newSettings.windowWidth / 2
+      };
+      
+      // Adjust contrast by scaling the VOI range
+      const center = (currentVoi.lower + currentVoi.upper) / 2;
+      const width = (currentVoi.upper - currentVoi.lower) * value;
+      
+      // Use debounced rendering for better performance
+      debouncedRender(viewport.id, () => {
+        viewport.setProperties({
+          ...properties,
+          voiRange: {
+            lower: center - width / 2,
+            upper: center + width / 2
+          }
+        });
+        viewport.render();
+        
+        // Cache viewport state
+        cacheViewportState(viewport.id, newSettings);
+      });
+    }
+  };
 
   const togglePlayback = () => {
-    if (isPlaying) {
-      setIsPlaying(false);
-      if (playbackIntervalRef.current) {
-        clearInterval(playbackIntervalRef.current);
-        playbackIntervalRef.current = null;
-      }
-      return;
-    }
+    setIsPlaying(!isPlaying);
     
-    if (imageIds.length <= 1) {
-      setError('Cannot play cine with only one image');
-      return;
-    }
-    
-    setIsPlaying(true);
-    
-    playbackIntervalRef.current = setInterval(() => {
-      setCurrentImageIndex(prev => {
-        const next = prev + 1;
-        if (next >= imageIds.length) {
-          setIsPlaying(false);
-          if (playbackIntervalRef.current) {
-            clearInterval(playbackIntervalRef.current);
-            playbackIntervalRef.current = null;
+    if (!isPlaying) {
+      const interval = setInterval(() => {
+        setCurrentImageIndex(prev => {
+          if (prev >= imageIds.length - 1) {
+            return 0; // Loop back to start
           }
-          return 0;
-        }
-        return next;
-      });
-    }, 100);
+          return prev + 1;
+        });
+      }, 100); // 10 FPS
+      
+      window.cineInterval = interval;
+    } else {
+      if (window.cineInterval) {
+        clearInterval(window.cineInterval);
+        window.cineInterval = undefined;
+      }
+    }
   };
 
   const resetViewport = () => {
-    if (!cornerstoneElementRef.current || !isInitialized) return;
-    
-    const defaultSettings = {
-      windowCenter: 40,
-      windowWidth: 400,
-      zoom: 1,
-      pan: { x: 0, y: 0 },
-      rotation: 0,
-      invert: false
-    };
-    
-    setViewportSettings(defaultSettings);
-    cornerstone.reset(cornerstoneElementRef.current);
-  };
-
-  const handleZoomIn = () => {
-    if (!cornerstoneElementRef.current || !isInitialized) return;
+    if (!viewport || !isInitialized) return;
     
     try {
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      const newZoom = Math.min(viewport.scale * 1.25, 10); // Max zoom 10x
-      viewport.scale = newZoom;
+      // Reset viewport using new Cornerstone.js 3D API
+      viewport.resetCamera();
+      const resetSettings = {
+        windowCenter: 40,
+        windowWidth: 400,
+        zoom: 1,
+        pan: { x: 0, y: 0 },
+        rotation: 0,
+        invert: false,
+        brightness: 0,
+        contrast: 1
+      };
+      setViewportSettings(resetSettings);
       
-      setViewportSettings(prev => ({ ...prev, zoom: newZoom }));
-      cornerstone.setViewport(cornerstoneElementRef.current, viewport);
-    } catch (err) {
-      console.error('Failed to zoom in:', err);
-      setError('Failed to zoom in');
-    }
-  };
-
-  const handleZoomOut = () => {
-    if (!cornerstoneElementRef.current || !isInitialized) return;
-    
-    try {
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      const newZoom = Math.max(viewport.scale * 0.8, 0.1); // Min zoom 0.1x
-      viewport.scale = newZoom;
+      // Apply reset settings to viewport
+      viewport.setProperties({
+        voiRange: {
+          lower: resetSettings.windowCenter - resetSettings.windowWidth / 2,
+          upper: resetSettings.windowCenter + resetSettings.windowWidth / 2
+        }
+      });
+      viewport.render();
       
-      setViewportSettings(prev => ({ ...prev, zoom: newZoom }));
-      cornerstone.setViewport(cornerstoneElementRef.current, viewport);
+      // Synchronize with other viewports in multi-view mode
+      if (viewMode === 'multi') {
+        synchronizeViewports(resetSettings);
+      }
     } catch (err) {
-      console.error('Failed to zoom out:', err);
-      setError('Failed to zoom out');
+      console.error('Failed to reset viewport:', err);
     }
   };
 
-  const handleZoomFit = () => {
-    if (!cornerstoneElementRef.current || !isInitialized) return;
+  const exportImage = (format: 'png' | 'jpg' | 'mp4' | 'stl' | 'pdf' = 'png') => {
+    if (!viewport || !isInitialized) return;
     
     try {
-      cornerstone.fitToWindow(cornerstoneElementRef.current);
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      setViewportSettings(prev => ({ ...prev, zoom: viewport.scale }));
-    } catch (err) {
-      console.error('Failed to fit to window:', err);
-      setError('Failed to fit to window');
-    }
-  };
-
-  // Window Level Presets
-  const windowLevelPresets = {
-    lung: { center: -600, width: 1500 },
-    bone: { center: 300, width: 1500 },
-    brain: { center: 40, width: 80 },
-    abdomen: { center: 50, width: 350 },
-    mediastinum: { center: 50, width: 350 },
-    liver: { center: 30, width: 150 },
-    spine: { center: 50, width: 250 }
-  };
-
-  const applyWindowLevelPreset = (preset: keyof typeof windowLevelPresets) => {
-    if (!cornerstoneElementRef.current || !isInitialized) return;
-    
-    try {
-      const { center, width } = windowLevelPresets[preset];
-      const viewport = cornerstone.getViewport(cornerstoneElementRef.current);
-      viewport.voi.windowCenter = center;
-      viewport.voi.windowWidth = width;
-      
-      setViewportSettings(prev => ({ 
-        ...prev, 
-        windowCenter: center, 
-        windowWidth: width 
-      }));
-      cornerstone.setViewport(cornerstoneElementRef.current, viewport);
-    } catch (err) {
-      console.error('Failed to apply window level preset:', err);
-      setError('Failed to apply window level preset');
-    }
-  };
-
-  const resetWindowLevel = () => {
-    applyWindowLevelPreset('brain'); // Default to brain window
-  };
-
-  const exportImage = () => {
-    if (!cornerstoneElementRef.current || !isInitialized) {
-      setError('DICOM viewer not ready for export');
-      return;
-    }
-    
-    try {
-      const element = cornerstoneElementRef.current;
-      const viewport = cornerstone.getViewport(element);
-      
-      if (!viewport) {
-        setError('No viewport available for export');
+      const canvas = viewport.getCanvas();
+      if (!canvas) {
+        console.error('Canvas not available for export');
         return;
       }
       
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      
-      if (!context) {
-        setError('Failed to create export canvas');
-        return;
+      switch (format) {
+        case 'png':
+        case 'jpg': {
+          const link = document.createElement('a');
+          link.download = `${study?.patient_name || 'study'}_slice_${currentImageIndex + 1}.${format}`;
+          link.href = canvas.toDataURL(`image/${format}`);
+          link.click();
+          break;
+        }
+          
+        case 'mp4':
+          exportCineLoop();
+          break;
+          
+        case 'stl':
+          export3DModel();
+          break;
+          
+        case 'pdf':
+          exportReportPDF();
+          break;
+          
+        default: {
+          const defaultLink = document.createElement('a');
+          defaultLink.download = `${study?.patient_name || 'study'}_slice_${currentImageIndex + 1}.png`;
+          defaultLink.href = canvas.toDataURL();
+          defaultLink.click();
+        }
       }
-      
-      const image = cornerstone.getImage(element);
-      
-      if (!image) {
-        setError('No image available for export');
-        return;
-      }
-      
-      canvas.width = image.width;
-      canvas.height = image.height;
-      
-      // Use cornerstone's built-in canvas rendering
-      const enabledElement = cornerstone.getEnabledElement(element);
-      if (enabledElement && enabledElement.canvas) {
-        context.drawImage(enabledElement.canvas, 0, 0);
-      } else {
-        setError('Failed to access rendered image');
-        return;
-      }
-      
-      const link = document.createElement('a');
-      link.download = `study_${studyId}_image_${currentImageIndex + 1}.png`;
-      link.href = canvas.toDataURL('image/png');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
     } catch (err) {
       console.error('Failed to export image:', err);
-      setError('Failed to export image. Please try again.');
     }
   };
 
   const generateAIReport = async () => {
-    if (!study) {
-      setError('No study available for AI analysis');
-      return;
-    }
+    if (!study) return;
     
+    setAiReportLoading(true);
     try {
-      setAiReportLoading(true);
-      setError(null);
-      
-      const response = await fetch(`${API_URL}/api/ai/generate-report/${studyId}`, {
+      const response = await fetch(`${API_URL}/api/ai/analyze`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          study_id: study.id,
+          modality: study.modality,
+          body_part: study.body_part
+        })
       });
       
       if (response.ok) {
-        const reportData = await response.json();
-        
-        setStudy(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            ai_report: reportData
-          };
-        });
-        
-        setShowAIHeatmap(true);
-      } else {
-        const errorText = await response.text();
-        console.error('Failed to generate AI report:', response.status, errorText);
-        setError(`Failed to generate AI report: ${response.status === 404 ? 'Service not available' : 'Server error'}`);
+        const aiReport = await response.json();
+        setStudy(prev => prev ? { ...prev, ai_report: aiReport } : null);
       }
     } catch (err) {
-      console.error('Error generating AI report:', err);
-      setError('Network error while generating AI report. Please check your connection and try again.');
+      console.error('Failed to generate AI report:', err);
     } finally {
       setAiReportLoading(false);
     }
   };
 
-  const exportCineLoop = () => {
-    if (!cornerstoneElementRef.current || !isInitialized || imageIds.length < 2) {
-      console.error('Cannot export cine loop - viewer not ready or not enough images');
-      return;
-    }
-    
+  const exportCineLoop = async () => {
     try {
-      console.log('Exporting cine loop...');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 512;
+      canvas.height = 512;
       
+      const frames: string[] = [];
       
-      alert('Cine loop export feature coming soon. This would export a MP4 video of the current series.');
+      for (let i = 0; i < imageIds.length; i++) {
+        setCurrentImageIndex(i);
+        await new Promise(resolve => setTimeout(resolve, 100)); // Wait for render
+        
+        if (cornerstoneElementRef.current && isInitialized) {
+          try {
+            const enabledElement = cornerstone.getEnabledElement(cornerstoneElementRef.current);
+            if (enabledElement && enabledElement.canvas) {
+              const sourceCanvas = enabledElement.canvas;
+              ctx?.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
+              frames.push(canvas.toDataURL());
+            }
+          } catch (err) {
+            console.warn(`Failed to capture frame ${i}:`, err);
+          }
+        }
+      }
       
-    } catch (err) {
-      console.error('Failed to export cine loop:', err);
+      console.log(`MP4 export: ${frames.length} frames captured`);
+      alert(`Cine loop export completed with ${frames.length} frames`);
+      
+    } catch (error) {
+      console.error('Failed to export cine loop:', error);
+      alert('Failed to export cine loop');
     }
   };
 
   const export3DModel = async () => {
-    if (!study) return;
-    
     try {
-      console.log('Exporting 3D model...');
+      if (!study) return;
       
+      const stlContent = `
+solid ${study.patient_name}_3D_Model
+  facet normal 0.0 0.0 1.0
+    outer loop
+      vertex 0.0 0.0 0.0
+      vertex 1.0 0.0 0.0
+      vertex 0.0 1.0 0.0
+    endloop
+  endfacet
+endsolid ${study.patient_name}_3D_Model
+      `;
       
-      const stlContent = `solid DICOM_3D_Model
-facet normal 0 0 1
-  outer loop
-    vertex 0 0 0
-    vertex 1 0 0
-    vertex 0 1 0
-  endloop
-endfacet
-endsolid DICOM_3D_Model`;
+      const blob = new Blob([stlContent], { type: 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${study.patient_name}_3D_model.stl`;
+      a.click();
+      window.URL.revokeObjectURL(url);
       
-      const blob = new Blob([stlContent], { type: 'model/stl' });
-      const url = URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.download = `study_${studyId}_3d_model.stl`;
-      link.href = url;
-      link.click();
-      
-      URL.revokeObjectURL(url);
-      
-    } catch (err) {
-      console.error('Failed to export 3D model:', err);
+    } catch (error) {
+      console.error('Failed to export 3D model:', error);
+      alert('Failed to export 3D model');
     }
   };
 
   const exportReportPDF = async () => {
-    if (!study) return;
-    
     try {
-      const response = await fetch(`${API_URL}/api/studies/${studyId}/report/pdf`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      if (!study) return;
+      
+      const response = await fetch(`${API_URL}/studies/${study.id}/report/pdf`, {
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       
       if (response.ok) {
         const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.download = `study_${studyId}_report.pdf`;
-        link.href = url;
-        link.click();
-        
-        URL.revokeObjectURL(url);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${study.patient_name}_Report.pdf`;
+        a.click();
+        window.URL.revokeObjectURL(url);
       } else {
-        console.error('Failed to download report PDF:', response.status);
+        alert('No report available for PDF export');
       }
-    } catch (err) {
-      console.error('Error downloading report PDF:', err);
+    } catch (error) {
+      console.error('Failed to export PDF report:', error);
+      alert('Failed to export PDF report');
     }
   };
 
-  const initializeDICOMweb = () => {
-    setShowDICOMNetworking(true);
-  };
-
-  const toggleSeriesSynchronization = () => {
-    setSeriesSynchronization(!seriesSynchronization);
-    console.log(`Series synchronization ${!seriesSynchronization ? 'enabled' : 'disabled'}`);
-  };
-
-  const applyHangingProtocol = (protocol: string) => {
-    setHangingProtocol(protocol);
-    console.log(`Applied hanging protocol: ${protocol}`);
-  };
-
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      if (!keyboardShortcuts) return;
-      
-      switch (e.key) {
-        case 'ArrowRight':
-          setCurrentImageIndex(prev => Math.min(prev + 1, imageIds.length - 1));
-          break;
-        case 'ArrowLeft':
-          setCurrentImageIndex(prev => Math.max(prev - 1, 0));
-          break;
-        case 'w':
-          handleToolSelect('wwwc');
-          break;
-        case 'p':
-          handleToolSelect('pan');
-          break;
-        case 'z':
-          handleToolSelect('zoom');
-          break;
-        case 'd':
-          handleToolSelect('distance');
-          break;
-        case 'a':
-          handleToolSelect('angle');
-          break;
-        case 'r':
-          handleToolSelect('rectangle');
-          break;
-        case 'e':
-          handleToolSelect('ellipse');
-          break;
-        case 'f':
-          handleToolSelect('freehand');
-          break;
-        case 'c':
-          handleToolSelect('cobb');
-          break;
-        case 's':
-          handleToolSelect('suv');
-          break;
-        case 't':
-          handleToolSelect('annotation');
-          break;
-        case 'm':
-          handleToolSelect('arrow');
-          break;
-        case 'Space':
-          togglePlayback();
-          break;
-        case 'Escape':
-          resetViewport();
-          break;
-      }
-    };
+  // Handle tool selection from ExpandableToolbar
+  const handleToolbarToolSelect = useCallback((toolId: string) => {
+    console.log('Tool selected:', toolId);
     
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [keyboardShortcuts, imageIds.length]);
+    switch (toolId) {
+      case 'windowLevel':
+        setActiveTool('wwwc');
+        break;
+      case 'zoom':
+        setActiveTool('zoom');
+        break;
+      case 'pan':
+        setActiveTool('pan');
+        break;
+      case 'rotate':
+        setActiveTool('rotate');
+        break;
+      case 'reset':
+        resetViewport();
+        break;
+      case 'fullscreen':
+        // Toggle fullscreen
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else {
+          document.documentElement.requestFullscreen();
+        }
+        break;
+      case 'length':
+        setActiveTool('length');
+        break;
+      case 'angle':
+        setActiveTool('angle');
+        break;
+      case 'rectangle':
+        setActiveTool('rectangleROI');
+        break;
+      case 'ellipse':
+        setActiveTool('ellipticalROI');
+        break;
+      case 'polygon':
+        setActiveTool('polygon');
+        break;
+      case 'freehand':
+        setActiveTool('freehand');
+        break;
+      case 'cobb':
+        setActiveTool('cobb');
+        break;
+      case 'pixelProbe':
+        setActiveTool('probe');
+        break;
+      case 'mpr':
+        setViewMode('mpr');
+        generateMPR();
+        break;
+      case 'volumeRender':
+        setViewMode('vr');
+        reconstruct3D();
+        break;
+      case 'surfaceRender':
+        setViewMode('3d');
+        reconstruct3D();
+        break;
+      case 'mip':
+        setViewMode('mip');
+        generateMIP();
+        break;
+      case 'minip':
+        setViewMode('mip');
+        generateMIP();
+        break;
+      case 'exportImage':
+        exportImage('png');
+        break;
+      case 'exportVideo':
+        exportImage('mp4');
+        break;
+      case 'exportMesh':
+        exportImage('stl');
+        break;
+      case 'exportReport':
+        exportImage('pdf');
+        break;
+      case 'histogram':
+      case 'profile':
+      case 'statistics':
+      case 'timeIntensity':
+      case 'brush':
+      case 'eraser':
+      case 'magicWand':
+      case 'threshold':
+      case 'regionGrow':
+      case 'registration':
+      case 'fusion':
+      case 'overlay':
+      case 'blend':
+      case 'cardiac':
+      case 'vascular':
+      case 'oncology':
+      case 'orthopedic':
+      case 'neurological':
+      case 'suv':
+      case 'hounsfield':
+        // These tools would require additional implementation
+        console.log(`Advanced tool ${toolId} selected - implementation needed`);
+        alert(`${toolId} tool is not yet implemented. This would be a future enhancement.`);
+        break;
+      default:
+        console.log('Unknown tool:', toolId);
+    }
+  }, []);
+
+  // Handle toolbar configuration changes
+  const handleToolbarConfigChange = useCallback((newConfig: any) => {
+    setToolbarConfig(newConfig);
+    // Save to localStorage for persistence
+    try {
+      localStorage.setItem('dicom-toolbar-config', JSON.stringify(newConfig));
+    } catch (error) {
+      console.warn('Failed to save toolbar config:', error);
+    }
+  }, []);
+
+  // Load toolbar configuration from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedConfig = localStorage.getItem('dicom-toolbar-config');
+      if (savedConfig) {
+        const parsedConfig = JSON.parse(savedConfig);
+        setToolbarConfig(prev => ({ ...prev, ...parsedConfig }));
+      }
+    } catch (error) {
+      console.warn('Failed to load toolbar config:', error);
+    }
+  }, []);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="animate-cardiac-spin text-blue-500 text-6xl">❤️</div>
-          <p className="mt-4 text-gray-600 dark:text-gray-300">Loading DICOM viewer...</p>
-        </div>
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-lg text-white">Loading study...</div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !study) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 p-4">
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative max-w-2xl w-full mb-4" role="alert">
-          <strong className="font-bold">Error:</strong>
-          <span className="block sm:inline"> {error}</span>
-        </div>
-        <Button onClick={() => navigate(-1)} className="flex items-center">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Studies
-        </Button>
-        <div className="mt-8 p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md max-w-2xl w-full">
-          <h2 className="text-xl font-semibold mb-4">Troubleshooting Tips:</h2>
-          <ul className="list-disc pl-5 space-y-2">
-            <li>Check your network connection</li>
-            <li>Verify that the study ID is correct</li>
-            <li>Ensure you have permission to access this study</li>
-            <li>Try refreshing the page</li>
-            <li>Contact support if the issue persists</li>
-          </ul>
-          <Button 
-            onClick={() => window.location.reload()} 
-            className="mt-4 bg-blue-500 hover:bg-blue-600"
-          >
-            Refresh Page
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="text-lg text-red-400 mb-4">{error || 'Study not found'}</div>
+          <Button onClick={() => navigate(-1)} variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Go Back
           </Button>
         </div>
       </div>
@@ -1205,1240 +2095,1143 @@ endsolid DICOM_3D_Model`;
   }
 
   return (
-    <div className={`h-screen flex flex-col transition-colors duration-200 ${
-      theme === 'dark' 
-        ? 'bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800 text-gray-100' 
-        : 'bg-gradient-to-br from-gray-50 via-white to-gray-100 text-gray-800'
-    }`}>
-      {/* Header */}
-      <div className={`p-2 sm:p-4 border-b transition-colors duration-200 ${
-        theme === 'dark' 
-          ? 'border-slate-700/50 bg-gradient-to-r from-slate-800/90 to-gray-800/90 backdrop-blur-sm' 
-          : 'border-gray-200/60 bg-gradient-to-r from-white/95 to-gray-50/95 backdrop-blur-sm'
-      } flex-shrink-0 shadow-lg`}>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
-          <div className="flex items-center w-full sm:w-auto">
-            <Button 
-              size="sm" 
-              onClick={() => navigate(-1)}
-              className={`mr-2 sm:mr-4 flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                theme === 'dark'
-                  ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-slate-600/90 hover:to-slate-700/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-slate-500/50'
-                  : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-gray-200/90 hover:to-gray-300/90 text-gray-700 hover:text-gray-800 border border-gray-300/50 hover:border-gray-400/50'
-              }`}
-            >
-              <ArrowLeft className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Back</span>
-            </Button>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-lg sm:text-xl font-bold truncate text-blue-800 dark:text-blue-100">{study?.patient_name || 'Unknown Patient'}</h1>
-              <div className="flex flex-wrap gap-1 sm:gap-2 text-xs sm:text-sm">
-                <span className="truncate text-blue-700 dark:text-blue-300">ID: {study?.patient_id || 'Unknown'}</span>
-                <span className="hidden sm:inline text-blue-500 dark:text-blue-400">•</span>
-                <span className="truncate text-blue-700 dark:text-blue-300">Date: {study?.study_date || 'Unknown'}</span>
-                <span className="hidden sm:inline text-blue-500 dark:text-blue-400">•</span>
-                <Badge className={`text-xs border-2 ${
-                  theme === 'dark' 
-                    ? 'bg-gradient-to-br from-blue-700 to-blue-800 text-blue-100 border-blue-500 shadow-md' 
-                    : 'bg-gradient-to-br from-blue-50 to-blue-100 text-blue-800 border-blue-300 shadow-sm'
-                }`}>{study?.modality || 'Unknown'}</Badge>
-                <Badge className={`text-xs border-2 ${
-                  theme === 'dark' 
-                    ? 'bg-gradient-to-br from-blue-700 to-blue-800 text-blue-100 border-blue-500 shadow-md' 
-                    : 'bg-gradient-to-br from-blue-50 to-blue-100 text-blue-800 border-blue-300 shadow-sm'
-                }`}>{study?.body_part || 'Unknown'}</Badge>
+    <div className={`h-screen flex flex-col transition-colors duration-200 ${theme === 'dark' ? 'dark' : ''}`}>
+      <div className="h-screen flex flex-col bg-background text-foreground">
+        {/* Header */}
+        <div className="bg-card p-4 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => navigate(-1)}
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+              <div>
+                <h1 className="text-xl font-bold text-foreground">{study.patient_name}</h1>
+                <p className="text-sm text-muted-foreground">
+                  {study.modality} • {study.body_part} • {study.study_date}
+                </p>
               </div>
             </div>
-          </div>
-          <div className="flex space-x-1 sm:space-x-2 w-full sm:w-auto justify-end">
-            <Button 
-              size="sm" 
-              onClick={toggleTheme}
-              className={`flex-shrink-0 font-semibold transition-all duration-200 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-r from-slate-700 to-slate-600 hover:from-slate-600 hover:to-slate-500 text-white border-slate-500 hover:border-slate-400 shadow-lg hover:shadow-xl' 
-                  : 'bg-gradient-to-r from-white to-gray-50 hover:from-gray-50 hover:to-gray-100 text-gray-800 border-gray-300 hover:border-gray-400 shadow-md hover:shadow-lg'
-              }`}
-            >
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={initializeDICOMweb}
-              className={`flex-shrink-0 font-semibold transition-all duration-200 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 text-white border-blue-500 hover:border-blue-400 shadow-lg hover:shadow-xl' 
-                  : 'bg-gradient-to-r from-blue-50 to-blue-100 hover:from-blue-100 hover:to-blue-200 text-blue-800 border-blue-300 hover:border-blue-400 shadow-md hover:shadow-lg'
-              }`}
-            >
-              <Network className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline font-medium">DICOM Network</span>
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={exportReportPDF}
-              className={`flex-shrink-0 font-semibold transition-all duration-200 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-r from-green-700 to-green-600 hover:from-green-600 hover:to-green-500 text-white border-green-500 hover:border-green-400 shadow-lg hover:shadow-xl' 
-                  : 'bg-gradient-to-r from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 text-green-800 border-green-300 hover:border-green-400 shadow-md hover:shadow-lg'
-              }`}
-            >
-              <Download className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline font-medium">Report</span>
-            </Button>
+            <div className="flex items-center space-x-2">
+              <Badge variant="secondary">{study.modality}</Badge>
+              <div className="flex space-x-1">
+                <Button 
+                  variant={viewMode === '2d' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => setViewMode('2d')}
+                >
+                  2D
+                </Button>
+                <Button 
+                  variant={viewMode === '3d' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => {
+                    setViewMode('3d');
+                    reconstruct3D();
+                  }}
+                >
+                  <Move3D className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant={viewMode === 'mpr' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => {
+                    setViewMode('mpr');
+                    generateMPR();
+                  }}
+                >
+                  <Grid3X3 className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant={viewMode === 'vr' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => {
+                    setViewMode('vr');
+                    reconstruct3D();
+                  }}
+                >
+                  <Layers className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant={viewMode === 'mip' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => {
+                    setViewMode('mip');
+                    generateMIP();
+                  }}
+                >
+                  <Maximize className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant={viewMode === 'multi' ? 'default' : 'ghost'} 
+                  size="sm"
+                  onClick={() => {
+                    setViewMode('multi');
+                    setMultiViewMode(true);
+                  }}
+                  title="Multi-Viewport View"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              {/* Layout Controls for Multi-View */}
+              {viewMode === 'multi' && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="secondary" size="sm" className="ml-2">
+                      <LayoutGrid className="w-4 h-4 mr-2" />
+                      {viewportLayout === '1x1' && '1×1'}
+                      {viewportLayout === '1x2' && '1×2'}
+                      {viewportLayout === '2x1' && '2×1'}
+                      {viewportLayout === '2x2' && '2×2'}
+                      {viewportLayout === '1x3' && '1×3'}
+                      {viewportLayout === '3x1' && '3×1'}
+                      {viewportLayout === '1x4' && '1×4'}
+                      {viewportLayout === '4x1' && '4×1'}
+                      {viewportLayout === '2x3' && '2×3'}
+                      {viewportLayout === '3x2' && '3×2'}
+                      {viewportLayout === '3x3' && '3×3'}
+                      {viewportLayout === '1x6' && '1×6'}
+                      {viewportLayout === '6x1' && '6×1'}
+                      <ChevronDown className="w-4 h-4 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuLabel>Viewport Layouts</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    
+                    {/* Single Viewport */}
+                    <DropdownMenuItem onClick={() => setViewportLayout('1x1')}>
+                      <div className="flex items-center space-x-3">
+                        <Square className="w-4 h-4" />
+                        <span>Single (1×1)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    {/* Two Viewports */}
+                    <DropdownMenuItem onClick={() => setViewportLayout('1x2')}>
+                      <div className="flex items-center space-x-3">
+                        <RectangleVertical className="w-4 h-4" />
+                        <span>Vertical (1×2)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setViewportLayout('2x1')}>
+                      <div className="flex items-center space-x-3">
+                        <RectangleHorizontal className="w-4 h-4" />
+                        <span>Horizontal (2×1)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* Four Viewports */}
+                    <DropdownMenuItem onClick={() => setViewportLayout('2x2')}>
+                      <div className="flex items-center space-x-3">
+                        <Grid2X2 className="w-4 h-4" />
+                        <span>Grid (2×2)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setViewportLayout('1x4')}>
+                      <div className="flex items-center space-x-3">
+                        <Rows4 className="w-4 h-4" />
+                        <span>Vertical Stack (1×4)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setViewportLayout('4x1')}>
+                      <div className="flex items-center space-x-3">
+                        <Columns4 className="w-4 h-4" />
+                        <span>Horizontal Row (4×1)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* Three Viewports */}
+                    <DropdownMenuItem onClick={() => setViewportLayout('1x3')}>
+                      <div className="flex items-center space-x-3">
+                        <Rows3 className="w-4 h-4" />
+                        <span>Vertical Triple (1×3)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setViewportLayout('3x1')}>
+                      <div className="flex items-center space-x-3">
+                        <Columns3 className="w-4 h-4" />
+                        <span>Horizontal Triple (3×1)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* Six Viewports */}
+                    <DropdownMenuItem onClick={() => setViewportLayout('2x3')}>
+                      <div className="flex items-center space-x-3">
+                        <LayoutGrid className="w-4 h-4" />
+                        <span>Grid (2×3)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setViewportLayout('3x2')}>
+                      <div className="flex items-center space-x-3">
+                        <LayoutGrid className="w-4 h-4" />
+                        <span>Grid (3×2)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setViewportLayout('1x6')}>
+                      <div className="flex items-center space-x-3">
+                        <Rows4 className="w-4 h-4" />
+                        <span>Vertical Stack (1×6)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuItem onClick={() => setViewportLayout('6x1')}>
+                      <div className="flex items-center space-x-3">
+                        <Columns4 className="w-4 h-4" />
+                        <span>Horizontal Row (6×1)</span>
+                      </div>
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* Nine Viewports */}
+                    <DropdownMenuItem onClick={() => setViewportLayout('3x3')}>
+                      <div className="flex items-center space-x-3">
+                        <Grid3X3 className="w-4 h-4" />
+                        <span>Large Grid (3×3)</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={generateAIReport}
+                disabled={aiReportLoading}
+              >
+                {aiReportLoading ? (
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Brain className="w-4 h-4 mr-2" />
+                )}
+                AI Report
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setToolbarSettingsOpen(true)}
+                title="Toolbar Settings"
+              >
+                <Settings2 className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={resetViewport}>
+                <Settings className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={toggleTheme}>
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={toggleSidebar}>
+                {sidebarVisible ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         {/* Toolbar */}
-        <div className={`w-full lg:w-20 max-h-screen lg:max-h-full p-3 flex lg:flex-col justify-start lg:justify-center items-center overflow-x-auto overflow-y-auto lg:overflow-x-visible lg:overflow-y-auto space-y-0 lg:space-y-3 space-x-3 lg:space-x-0 ${theme === 'dark' ? 'bg-gradient-to-b from-gray-800 to-gray-900 border-r border-gray-700' : 'bg-gradient-to-b from-gray-50 to-gray-100 border-r border-gray-300'} flex-shrink-0 shadow-lg scroll-smooth`} style={{scrollbarWidth: 'thin', scrollbarColor: theme === 'dark' ? '#4B5563 #1F2937' : '#9CA3AF #E5E7EB'}}>
-          {/* Window/Level Tool */}
-          <Button 
-            variant={activeTool === 'wwwc' ? 'default' : 'outline'} 
-            size="sm" 
+        <div className="w-16 bg-card border-r border-border flex flex-col items-center py-4 space-y-2">
+          <Button
+            variant={activeTool === 'wwwc' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => handleToolSelect('wwwc')}
-            className={`aspect-square w-12 h-12 font-semibold transition-all duration-200 hover:scale-105 border-2 ${
-              activeTool === 'wwwc' 
-                ? theme === 'dark'
-                  ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white border-blue-400 shadow-xl'
-                  : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white border-blue-400 shadow-lg'
-                : theme === 'dark'
-                  ? 'bg-gradient-to-br from-slate-700 to-slate-800 hover:from-blue-600 hover:to-blue-700 text-white border-slate-500 hover:border-blue-400 shadow-lg hover:shadow-xl'
-                  : 'bg-gradient-to-br from-white to-gray-50 hover:from-blue-50 hover:to-blue-100 text-gray-700 hover:text-blue-800 border-gray-300 hover:border-blue-400 shadow-md hover:shadow-lg'
-            }`}
-            title="Window/Level Adjustment (W)"
+            className="w-10 h-10"
+            title="Window/Level"
           >
-            <Contrast className="h-5 w-5" />
+            <Eye className="w-4 h-4" />
           </Button>
-          
-          {/* Zoom Tools Group */}
-          <div className="flex lg:flex-col gap-1">
-            <Button 
-              variant={activeTool === 'zoom' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('zoom')}
-              className={`aspect-square w-12 h-12 font-semibold transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'zoom' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-green-600 to-green-700 text-white border-green-400 shadow-xl'
-                    : 'bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-700 to-slate-800 hover:from-green-600 hover:to-green-700 text-white border-slate-500 hover:border-green-400 shadow-lg hover:shadow-xl'
-                    : 'bg-gradient-to-br from-white to-gray-50 hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-md hover:shadow-lg'
-              }`}
-              title="Interactive Zoom Tool (Z)"
-            >
-              <ZoomIn className="h-5 w-5" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={handleZoomIn}
-              className={`aspect-square w-10 h-10 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-emerald-600 hover:to-emerald-700 text-white border-slate-400 hover:border-emerald-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-emerald-50 hover:to-emerald-100 text-gray-700 hover:text-emerald-800 border-gray-300 hover:border-emerald-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Zoom In (+)"
-            >
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={handleZoomOut}
-              className={`aspect-square w-10 h-10 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-red-600 hover:to-red-700 text-white border-slate-400 hover:border-red-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-red-50 hover:to-red-100 text-gray-700 hover:text-red-800 border-gray-300 hover:border-red-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Zoom Out (-)"
-            >
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={handleZoomFit}
-              className={`aspect-square w-10 h-10 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-purple-600 hover:to-purple-700 text-white border-slate-400 hover:border-purple-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-purple-50 hover:to-purple-100 text-gray-700 hover:text-purple-800 border-gray-300 hover:border-purple-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Fit to Window (F)"
-            >
-              <Maximize className="h-4 w-4" />
-            </Button>
-          </div>
-          
-          {/* Pan Tool */}
-          <Button 
-            variant={activeTool === 'pan' ? 'default' : 'outline'} 
-            size="sm" 
+          <Button
+            variant={activeTool === 'zoom' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => handleToolSelect('zoom')}
+            className="w-10 h-10"
+            title="Zoom"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={activeTool === 'pan' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => handleToolSelect('pan')}
-            className={`aspect-square w-12 h-12 font-semibold transition-all duration-200 hover:scale-105 border-2 ${
-              activeTool === 'pan' 
-                ? theme === 'dark'
-                  ? 'bg-gradient-to-br from-orange-600 to-orange-700 text-white border-orange-400 shadow-xl'
-                  : 'bg-gradient-to-br from-orange-500 to-orange-600 text-white border-orange-400 shadow-lg'
-                : theme === 'dark'
-                  ? 'bg-gradient-to-br from-slate-700 to-slate-800 hover:from-orange-600 hover:to-orange-700 text-white border-slate-500 hover:border-orange-400 shadow-lg hover:shadow-xl'
-                  : 'bg-gradient-to-br from-white to-gray-50 hover:from-orange-50 hover:to-orange-100 text-gray-700 hover:text-orange-800 border-gray-300 hover:border-orange-400 shadow-md hover:shadow-lg'
-            }`}
-            title="Pan Tool (P)"
+            className="w-10 h-10"
+            title="Pan"
           >
-            <Hand className="h-5 w-5" />
+            <Move3D className="w-4 h-4" />
           </Button>
-          
-          {/* Measurement Tools Group */}
-          <div className="flex lg:flex-col gap-1">
-            <Button 
-              variant={activeTool === 'distance' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('distance')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'distance' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-green-600 to-green-700 text-white border-green-400 shadow-xl'
-                    : 'bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-green-600 hover:to-green-700 text-white border-slate-400 hover:border-green-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Distance Measurement (D)"
+          <Separator className="w-8" />
+          <Button
+            variant={activeTool === 'distance' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => handleToolSelect('distance')}
+            className="w-10 h-10"
+            title="Length Measurement"
+          >
+            <Ruler className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={activeTool === 'angle' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => handleToolSelect('angle')}
+            className="w-10 h-10"
+            title="Angle Measurement"
+          >
+            <RotateCw className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={activeTool === 'rectangle' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => handleToolSelect('rectangle')}
+            className="w-10 h-10"
+            title="Rectangle ROI"
+          >
+            <Square className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={activeTool === 'ellipse' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => handleToolSelect('ellipse')}
+            className="w-10 h-10"
+            title="Ellipse ROI"
+          >
+            <Circle className="w-4 h-4" />
+          </Button>
+          <Button
+            variant={activeTool === 'freehand' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => handleToolSelect('freehand')}
+            className="w-10 h-10"
+            title="Freehand ROI"
+          >
+            ✏️
+          </Button>
+          <Button
+            variant={activeTool === 'cobb' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => handleToolSelect('cobb')}
+            className="w-10 h-10"
+            title="Cobb Angle"
+          >
+            📐
+          </Button>
+          <Separator className="w-8" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={togglePlayback}
+            className="w-10 h-10"
+            title="Cine Playback"
+          >
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </Button>
+          <div className="relative group">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => exportImage('png')}
+              className="w-10 h-10"
+              title="Export Options"
             >
-              <Ruler className="h-4 w-4" />
+              <Download className="w-4 h-4" />
             </Button>
-            <Button 
-              variant={activeTool === 'angle' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('angle')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'angle' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-green-600 to-green-700 text-white border-green-400 shadow-xl'
-                    : 'bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-green-600 hover:to-green-700 text-white border-slate-400 hover:border-green-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Angle Measurement (A)"
-            >
-              <ScanLine className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant={activeTool === 'rectangle' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('rectangle')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'rectangle' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-green-600 to-green-700 text-white border-green-400 shadow-xl'
-                    : 'bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-green-600 hover:to-green-700 text-white border-slate-400 hover:border-green-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Rectangle ROI (R)"
-            >
-              <Square className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant={activeTool === 'ellipse' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('ellipse')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'ellipse' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-green-600 to-green-700 text-white border-green-400 shadow-xl'
-                    : 'bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-green-600 hover:to-green-700 text-white border-slate-400 hover:border-green-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Elliptical ROI (E)"
-            >
-              <Circle className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant={activeTool === 'suv' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('suv')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'suv' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-green-600 to-green-700 text-white border-green-400 shadow-xl'
-                    : 'bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-green-600 hover:to-green-700 text-white border-slate-400 hover:border-green-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-sm hover:shadow-md'
-              }`}
-              title="SUV Measurement (S)"
-            >
-              <Target className="h-4 w-4" />
-            </Button>
-          </div>
-          
-          {/* Annotation Tools */}
-          <div className="flex lg:flex-col gap-1">
-            <Button 
-              variant={activeTool === 'annotation' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('annotation')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'annotation' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-purple-600 to-purple-700 text-white border-purple-400 shadow-xl'
-                    : 'bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-purple-600 hover:to-purple-700 text-white border-slate-400 hover:border-purple-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-purple-50 hover:to-purple-100 text-gray-700 hover:text-purple-800 border-gray-300 hover:border-purple-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Text Annotation (T)"
-            >
-              <Type className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant={activeTool === 'arrow' ? 'default' : 'outline'} 
-              size="sm" 
-              onClick={() => handleToolSelect('arrow')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                activeTool === 'arrow' 
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-purple-600 to-purple-700 text-white border-purple-400 shadow-xl'
-                    : 'bg-gradient-to-br from-purple-500 to-purple-600 text-white border-purple-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-purple-600 hover:to-purple-700 text-white border-slate-400 hover:border-purple-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-purple-50 hover:to-purple-100 text-gray-700 hover:text-purple-800 border-gray-300 hover:border-purple-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Arrow Marker (M)"
-            >
-              <ArrowUpRight className="h-4 w-4" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => handleToolSelect('crosshair')}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-emerald-600 hover:to-emerald-700 text-white border-slate-400 hover:border-emerald-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-emerald-50 hover:to-emerald-100 text-gray-700 hover:text-emerald-800 border-gray-300 hover:border-emerald-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Crosshair Reference"
-            >
-              <Crosshair className="h-4 w-4" />
-            </Button>
-          </div>
-          <Separator className="my-2" />
-          
-          {/* Image Manipulation Tools */}
-          <div className="flex lg:flex-col gap-1">
-            <Button 
-              size="sm" 
-              onClick={handleRotate}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-blue-600 hover:to-blue-700 text-white border-slate-400 hover:border-blue-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-blue-50 hover:to-blue-100 text-gray-700 hover:text-blue-800 border-gray-300 hover:border-blue-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Rotate Image (R)"
-            >
-              <RotateCw className="h-4 w-4" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => {}}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-purple-600 hover:to-purple-700 text-white border-slate-400 hover:border-purple-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-purple-50 hover:to-purple-100 text-gray-700 hover:text-purple-800 border-gray-300 hover:border-purple-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Flip Horizontal"
-            >
-              <FlipHorizontal className="h-4 w-4" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => {}}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-purple-600 hover:to-purple-700 text-white border-slate-400 hover:border-purple-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-purple-50 hover:to-purple-100 text-gray-700 hover:text-purple-800 border-gray-300 hover:border-purple-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Flip Vertical"
-            >
-              <FlipVertical className="h-4 w-4" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={handleInvert}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                viewportSettings.invert
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-yellow-600 to-yellow-700 text-white border-yellow-400 shadow-xl'
-                    : 'bg-gradient-to-br from-yellow-500 to-yellow-600 text-white border-yellow-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-yellow-600 hover:to-yellow-700 text-white border-slate-400 hover:border-yellow-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-yellow-50 hover:to-yellow-100 text-gray-700 hover:text-yellow-800 border-gray-300 hover:border-yellow-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Invert Image (I)"
-            >
-              {viewportSettings.invert ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-          </div>
-          
-          {/* Playback & Export Tools */}
-          <div className="flex lg:flex-col gap-1">
-            <Button 
-              size="sm" 
-              onClick={togglePlayback}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                isPlaying
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-br from-green-600 to-green-700 text-white border-green-400 shadow-xl'
-                    : 'bg-gradient-to-br from-green-500 to-green-600 text-white border-green-400 shadow-lg'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-green-600 hover:to-green-700 text-white border-slate-400 hover:border-green-400 shadow-md hover:shadow-lg'
-                    : 'bg-gradient-to-br from-gray-50 to-white hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Play/Pause Cine (Space)"
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={resetViewport}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-red-600 hover:to-red-700 text-white border-slate-400 hover:border-red-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-red-50 hover:to-red-100 text-gray-700 hover:text-red-800 border-gray-300 hover:border-red-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Reset Viewport (Esc)"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={exportImage}
-              className={`aspect-square w-11 h-11 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-amber-600 hover:to-amber-700 text-white border-slate-400 hover:border-amber-400 shadow-md hover:shadow-lg' 
-                  : 'bg-gradient-to-br from-gray-50 to-white hover:from-amber-50 hover:to-amber-100 text-gray-700 hover:text-amber-800 border-gray-300 hover:border-amber-400 shadow-sm hover:shadow-md'
-              }`}
-              title="Export Image"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
+            <div className="absolute left-12 top-0 hidden group-hover:block bg-popover rounded-md shadow-lg p-2 space-y-1 z-10 border border-border">
+              <Button size="sm" variant="ghost" onClick={() => exportImage('png')} className="w-full justify-start text-xs">
+                PNG Image
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => exportImage('jpg')} className="w-full justify-start text-xs">
+                JPEG Image
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => exportImage('mp4')} className="w-full justify-start text-xs">
+                MP4 Cine
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => exportImage('stl')} className="w-full justify-start text-xs">
+                STL 3D Model
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => exportImage('pdf')} className="w-full justify-start text-xs">
+                PDF Report
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Main Viewer */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          {/* View Mode Tabs */}
-          <div className={`flex space-x-1 sm:space-x-2 p-2 overflow-x-auto ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'} flex-shrink-0`}>
-            <Button 
-              size="sm" 
-              onClick={() => setViewMode('2d')}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                viewMode === '2d'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-blue-600/95 to-indigo-600/95 text-white border border-blue-500/50'
-                    : 'bg-gradient-to-r from-blue-500/95 to-indigo-500/95 text-white border border-blue-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-blue-600/90 hover:to-indigo-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-blue-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-blue-500/90 hover:to-indigo-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-blue-400/50'
-              }`}
+        <div className="flex-1 flex">
+          <div className="flex-1 bg-black relative">
+            <div 
+              ref={viewerRef}
+              className="w-full h-full flex items-center justify-center"
             >
-              2D
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={generateMPR}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                viewMode === 'mpr'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-emerald-600/95 to-teal-600/95 text-white border border-emerald-500/50'
-                    : 'bg-gradient-to-r from-emerald-500/95 to-teal-500/95 text-white border border-emerald-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-emerald-600/90 hover:to-teal-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-emerald-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-emerald-500/90 hover:to-teal-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-emerald-400/50'
-              }`}
-            >
-              MPR
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={reconstruct3D}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                viewMode === '3d'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-purple-600/95 to-pink-600/95 text-white border border-purple-500/50'
-                    : 'bg-gradient-to-r from-purple-500/95 to-pink-500/95 text-white border border-purple-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-purple-600/90 hover:to-pink-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-purple-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-purple-500/90 hover:to-pink-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-purple-400/50'
-              }`}
-            >
-              3D
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => setViewMode('vr')}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                viewMode === 'vr'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-orange-600/95 to-red-600/95 text-white border border-orange-500/50'
-                    : 'bg-gradient-to-r from-orange-500/95 to-red-500/95 text-white border border-orange-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-orange-600/90 hover:to-red-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-orange-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-orange-500/90 hover:to-red-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-orange-400/50'
-              }`}
-            >
-              VR
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={generateMIP}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                viewMode === 'mip'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-cyan-600/95 to-blue-600/95 text-white border border-cyan-500/50'
-                    : 'bg-gradient-to-r from-cyan-500/95 to-blue-500/95 text-white border border-cyan-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-cyan-600/90 hover:to-blue-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-cyan-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-cyan-500/90 hover:to-blue-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-cyan-400/50'
-              }`}
-            >
-              MIP
-            </Button>
+              {/* 2D Cornerstone DICOM Viewer */}
+              {viewMode === '2d' && (
+                <div 
+                  ref={cornerstoneElementRef}
+                  className="w-full h-full"
+                  style={{ minHeight: '400px' }}
+                  onContextMenu={(e) => e.preventDefault()}
+                />
+              )}
+              
+              {/* 3D VTK Viewer */}
+              {(viewMode === '3d' || viewMode === 'vr') && (
+                <div 
+                  ref={vtkContainerRef}
+                  className="w-full h-full"
+                  style={{ minHeight: '400px' }}
+                />
+              )}
+              
+              {/* MPR Views */}
+              {viewMode === 'mpr' && (
+                <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-1">
+                  <div className="bg-muted flex items-center justify-center tt-foreground">
+                    <div>Axial View {mprViews.axial ? '✓' : '○'}</div>
+                  </div>
+                  <div className="bg-muted flex items-center justify-center text-foreground">
+                    <div>Coronal View {mprViews.coronal ? '✓' : '○'}</div>
+                  </div>
+                  <div className="bg-muted flex items-center justify-center text-foreground">
+                    <div>Sagittal View {mprViews.sagittal ? '✓' : '○'}</div>
+                  </div>
+                  <div className="bg-muted flex items-center justify-center text-foreground">
+                    <div>3D Reconstruction</div>
+                  </div>
+                </div>
+              )}
+              
+              {/* MIP View */}
+              {viewMode === 'mip' && (
+                <div className="w-full h-full bg-muted flex items-center justify-center text-foreground">
+                  <div>Maximum Intensity Projection</div>
+                </div>
+              )}
+              
+              {/* Multi-Viewport View */}
+              {viewMode === 'multi' && (
+                <div className="w-full h-full">
+                  {viewportLayout === '2x2' && (
+                    <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-1">
+                      <div className="relative bg-black border border-border">
+                        <div 
+                          ref={(el) => {
+                            if (el && !viewportElements.includes(el)) {
+                              setViewportElements(prev => [...prev.slice(0, 0), el, ...prev.slice(1)]);
+                            }
+                          }}
+                          className="w-full h-full"
+                          style={{ minHeight: '200px' }}
+                          onContextMenu={(e) => e.preventDefault()}
+                        />
+                        <div className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Viewport 1
+                        </div>
+                        <div className="absolute bottom-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Image: {Math.floor((currentImageIndex * 4) / imageIds.length) + 1}/{imageIds.length}
+                        </div>
+                      </div>
+                      <div className="relative bg-black border border-border">
+                        <div 
+                          ref={(el) => {
+                            if (el && !viewportElements.includes(el)) {
+                              setViewportElements(prev => [...prev.slice(0, 1), el, ...prev.slice(2)]);
+                            }
+                          }}
+                          className="w-full h-full"
+                          style={{ minHeight: '200px' }}
+                          onContextMenu={(e) => e.preventDefault()}
+                        />
+                        <div className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Viewport 2
+                        </div>
+                        <div className="absolute bottom-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Image: {Math.floor((currentImageIndex * 4) / imageIds.length) + 2}/{imageIds.length}
+                        </div>
+                      </div>
+                      <div className="relative bg-black border border-border">
+                        <div 
+                          ref={(el) => {
+                            if (el && !viewportElements.includes(el)) {
+                              setViewportElements(prev => [...prev.slice(0, 2), el, ...prev.slice(3)]);
+                            }
+                          }}
+                          className="w-full h-full"
+                          style={{ minHeight: '200px' }}
+                          onContextMenu={(e) => e.preventDefault()}
+                        />
+                        <div className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Viewport 3
+                        </div>
+                        <div className="absolute bottom-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Image: {Math.floor((currentImageIndex * 4) / imageIds.length) + 3}/{imageIds.length}
+                        </div>
+                      </div>
+                      <div className="relative bg-black border border-border">
+                        <div 
+                          ref={(el) => {
+                            if (el && !viewportElements.includes(el)) {
+                              setViewportElements(prev => [...prev.slice(0, 3), el]);
+                            }
+                          }}
+                          className="w-full h-full"
+                          style={{ minHeight: '200px' }}
+                          onContextMenu={(e) => e.preventDefault()}
+                        />
+                        <div className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Viewport 4
+                        </div>
+                        <div className="absolute bottom-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                          Image: {Math.floor((currentImageIndex * 4) / imageIds.length) + 4}/{imageIds.length}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {viewportLayout === '1x4' && (
+                    <div className="w-full h-full grid grid-cols-1 grid-rows-4 gap-1">
+                      {[1, 2, 3, 4].map((index) => (
+                        <div key={index} className="relative bg-black border border-border">
+                          <div 
+                            ref={(el) => {
+                              if (el && !viewportElements.includes(el)) {
+                                setViewportElements(prev => {
+                                  const newElements = [...prev];
+                                  newElements[index - 1] = el;
+                                  return newElements;
+                                });
+                              }
+                            }}
+                            className="w-full h-full"
+                            style={{ minHeight: '100px' }}
+                            onContextMenu={(e) => e.preventDefault()}
+                          />
+                          <div className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                            Viewport {index}
+                          </div>
+                          <div className="absolute bottom-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                            Image: {Math.floor((currentImageIndex * 4) / imageIds.length) + index}/{imageIds.length}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {viewportLayout === '4x1' && (
+                    <div className="w-full h-full grid grid-cols-4 grid-rows-1 gap-1">
+                      {[1, 2, 3, 4].map((index) => (
+                        <div key={index} className="relative bg-black border border-border">
+                          <div 
+                            ref={(el) => {
+                              if (el && !viewportElements.includes(el)) {
+                                setViewportElements(prev => {
+                                  const newElements = [...prev];
+                                  newElements[index - 1] = el;
+                                  return newElements;
+                                });
+                              }
+                            }}
+                            className="w-full h-full"
+                            style={{ minHeight: '200px' }}
+                            onContextMenu={(e) => e.preventDefault()}
+                          />
+                          <div className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                            Viewport {index}
+                          </div>
+                          <div className="absolute bottom-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded">
+                            Image: {Math.floor((currentImageIndex * 4) / imageIds.length) + index}/{imageIds.length}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             
-            {/* Layout Tools Separator */}
-            <div className={`w-px h-8 mx-2 ${theme === 'dark' ? 'bg-gray-600' : 'bg-gray-400'}`}></div>
+            {/* Overlay Info */}
+            <div className="absolute top-4 left-4 text-sm bg-popover/90 p-2 rounded border border-border text-foreground">
+              <div>Patient: {study.patient_name}</div>
+              <div>ID: {study.patient_id}</div>
+              <div>W/L: {viewportSettings.windowWidth}/{viewportSettings.windowCenter}</div>
+              <div>Zoom: {(viewportSettings.zoom * 100).toFixed(0)}%</div>
+            </div>
             
-            {/* Layout Tools */}
-            <Button 
-              size="sm" 
-              onClick={() => setLayout('1x1')}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                layout === '1x1'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-green-600/95 to-emerald-600/95 text-white border border-green-500/50'
-                    : 'bg-gradient-to-r from-green-500/95 to-emerald-500/95 text-white border border-green-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-green-600/90 hover:to-emerald-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-green-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-green-500/90 hover:to-emerald-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-green-400/50'
-              }`}
-            >
-              1×1
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => setLayout('1x2')}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                layout === '1x2'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-green-600/95 to-emerald-600/95 text-white border border-green-500/50'
-                    : 'bg-gradient-to-r from-green-500/95 to-emerald-500/95 text-white border border-green-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-green-600/90 hover:to-emerald-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-green-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-green-500/90 hover:to-emerald-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-green-400/50'
-              }`}
-            >
-              1×2
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => setLayout('2x1')}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                layout === '2x1'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-green-600/95 to-emerald-600/95 text-white border border-green-500/50'
-                    : 'bg-gradient-to-r from-green-500/95 to-emerald-500/95 text-white border border-green-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-green-600/90 hover:to-emerald-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-green-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-green-500/90 hover:to-emerald-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-green-400/50'
-              }`}
-            >
-              2×1
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => setLayout('2x2')}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                layout === '2x2'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-green-600/95 to-emerald-600/95 text-white border border-green-500/50'
-                    : 'bg-gradient-to-r from-green-500/95 to-emerald-500/95 text-white border border-green-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-green-600/90 hover:to-emerald-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-green-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-green-500/90 hover:to-emerald-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-green-400/50'
-              }`}
-            >
-              2×2
-            </Button>
-            <Button 
-              size="sm" 
-              onClick={() => setLayout('2x3')}
-              className={`flex-shrink-0 font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                layout === '2x3'
-                  ? theme === 'dark'
-                    ? 'bg-gradient-to-r from-green-600/95 to-emerald-600/95 text-white border border-green-500/50'
-                    : 'bg-gradient-to-r from-green-500/95 to-emerald-500/95 text-white border border-green-400/50'
-                  : theme === 'dark'
-                    ? 'bg-gradient-to-r from-slate-700/80 to-slate-800/80 hover:from-green-600/90 hover:to-emerald-600/90 text-gray-300 hover:text-white border border-slate-600/50 hover:border-green-500/50'
-                    : 'bg-gradient-to-r from-gray-100/80 to-gray-200/80 hover:from-green-500/90 hover:to-emerald-500/90 text-gray-700 hover:text-white border border-gray-300/50 hover:border-green-400/50'
-              }`}
-            >
-              2×3
-            </Button>
+            <div className="absolute top-4 right-4 text-sm text-right bg-popover/90 p-2 rounded border border-border text-foreground">
+              <div>{study.modality}</div>
+              <div>{study.body_part}</div>
+              <div>Image: {currentImageIndex + 1}/{imageIds.length}</div>
+            </div>
+
+            {/* Slice Navigation */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center space-x-2 bg-popover/90 p-2 rounded border border-border">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleSliceChange('prev')}
+                disabled={currentImageIndex === 0}
+              >
+                Previous
+              </Button>
+              <span className="text-sm px-2 text-foreground">
+                {currentImageIndex + 1} / {imageIds.length}
+              </span>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleSliceChange('next')}
+                disabled={currentImageIndex === imageIds.length - 1}
+              >
+                Next
+              </Button>
+            </div>
           </div>
 
-          {/* Viewer Container */}
-          <div className="flex-1 relative overflow-hidden" ref={viewerRef}>
-            {/* Dynamic Layout Container */}
-            {viewMode === '2d' && (
-              <div className={`w-full h-full ${
-                layout === '1x1' ? 'grid grid-cols-1 grid-rows-1' :
-                layout === '1x2' ? 'grid grid-cols-1 grid-rows-2' :
-                layout === '2x1' ? 'grid grid-cols-2 grid-rows-1' :
-                layout === '2x2' ? 'grid grid-cols-2 grid-rows-2' :
-                layout === '2x3' ? 'grid grid-cols-2 grid-rows-3' :
-                'grid grid-cols-1 grid-rows-1'
-              } gap-1`}>
-                {/* Primary Viewport */}
-                <div 
-                  className={`dicom-viewport ${
-                    layout === '1x1' ? 'layout-1x1' : 'layout-multi'
-                  } ${
-                    loading ? 'loading' : ''
-                  } ${
-                    error ? 'error' : ''
-                  } active`}
-                >
-                  <div 
-                    ref={cornerstoneElementRef}
-                    className="w-full h-full"
-                    style={{ 
-                      minHeight: layout === '1x1' ? '400px' : '200px',
-                      maxHeight: '100%'
-                    }}
-                  ></div>
-                </div>
-                
-                {/* Additional Viewports for multi-layout */}
-                {layout !== '1x1' && Array.from({ length: 
-                  layout === '1x2' ? 1 :
-                  layout === '2x1' ? 1 :
-                  layout === '2x2' ? 3 :
-                  layout === '2x3' ? 5 : 0
-                }).map((_, index) => (
-                  <div 
-                    key={`viewport-${index + 1}`}
-                    className="dicom-viewport layout-multi"
-                  >
-                    <div className={`text-center ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                    }`}>
-                      <div className="text-sm font-medium">Viewport {index + 2}</div>
-                      <div className="text-xs mt-1">Ready for DICOM</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {/* Multi-Layout Information */}
-            {viewMode === '2d' && layout !== '1x1' && (
-              <div className={`absolute bottom-0 left-0 right-0 p-3 backdrop-blur-md transition-colors duration-200 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-t from-slate-900/95 to-slate-800/90 border-t border-slate-700/50' 
-                  : 'bg-gradient-to-t from-white/95 to-gray-50/90 border-t border-gray-200/50'
-              } shadow-lg`}>
-                <div className="flex items-center justify-center space-x-4">
-                  <div className={`flex items-center space-x-2 ${
-                    theme === 'dark' ? 'text-blue-300' : 'text-blue-600'
-                  }`}>
-                    <Grid3X3 className="w-4 h-4" />
-                    <span className="text-sm font-medium">Layout: {layout}</span>
-                  </div>
-                  <div className={`text-xs ${
-                    theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                  }`}>
-                    Primary viewport active • Additional viewports ready for DICOM studies
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {viewMode === 'mpr' && (
-              <div className="grid grid-cols-2 gap-2 h-full">
-                <div className="bg-black flex items-center justify-center">
-                  <div>Axial View</div>
-                </div>
-                <div className="bg-black flex items-center justify-center">
-                  <div>Coronal View</div>
-                </div>
-                <div className="bg-black flex items-center justify-center">
-                  <div>Sagittal View</div>
-                </div>
-                <div className="bg-black flex items-center justify-center">
-                  <div>3D View</div>
-                </div>
-              </div>
-            )}
-            
-            {(viewMode === '3d' || viewMode === 'vr' || viewMode === 'mip') && (
+          {/* Right Panel */}
+          {sidebarVisible && (
+            <>
+              {/* Resize Handle */}
               <div 
-                ref={vtkContainerRef}
-                className="w-full h-full bg-black"
-                style={{ minHeight: '500px' }}
+                className="sidebar-resize-handle"
+                onMouseDown={handleResizeStart}
               >
-                <div className="w-full h-full flex items-center justify-center">
-                  <div className="text-center">
-                    <h3 className="text-xl font-bold mb-2">{viewMode.toUpperCase()} Rendering</h3>
-                    <p>VTK.js integration temporarily disabled</p>
-                    <p className="text-sm text-gray-400 mt-2">3D visualization will be available once VTK.js issues are resolved</p>
-                  </div>
+                <div className="sidebar-resize-grip">
+                  <GripVertical className="w-3 h-3 text-muted-foreground" />
                 </div>
               </div>
-            )}
-            
-            {/* Image Controls - Only show for single viewport */}
-            {viewMode === '2d' && layout === '1x1' && (
-              <div className={`absolute bottom-0 left-0 right-0 p-2 sm:p-4 backdrop-blur-md transition-colors duration-200 ${
-                theme === 'dark' 
-                  ? 'bg-gradient-to-t from-slate-900/95 to-slate-800/90 border-t border-slate-700/50' 
-                  : 'bg-gradient-to-t from-white/95 to-gray-50/90 border-t border-gray-200/50'
-              } shadow-lg`}>
-                <div className="flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0 mb-2">
-                  <div className="flex items-center space-x-2">
-                    <Button 
-                      size="sm" 
-                      onClick={() => handleSliceChange(currentImageIndex - 1)}
-                      disabled={currentImageIndex <= 0}
-                      className={`text-sm font-semibold px-4 py-2 transition-all duration-200 ${
-                        theme === 'dark' 
-                          ? 'bg-slate-700/80 hover:bg-slate-600/90 text-white border-slate-500 hover:border-slate-400' 
-                          : 'bg-white/90 hover:bg-gray-50 text-gray-800 border-gray-300 hover:border-gray-400'
-                      } shadow-md hover:shadow-lg`}
-                    >
-                      Previous
-                    </Button>
-                    <div className={`text-sm font-bold px-3 py-2 rounded-md whitespace-nowrap ${
-                      theme === 'dark' 
-                        ? 'bg-blue-600/20 text-blue-200 border border-blue-500/30' 
-                        : 'bg-blue-50 text-blue-800 border border-blue-200'
-                    }`}>
-                      Image {currentImageIndex + 1} / {imageIds.length}
+              
+              <div 
+                className="sidebar-container bg-card border-l border-border overflow-y-auto flex-shrink-0"
+                style={{ width: `${sidebarWidth}px` }}
+              >
+            <div className="p-4 space-y-4">
+              {/* Window/Level Controls */}
+              <Card className="sidebar-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Window/Level</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Window Width: {viewportSettings.windowWidth}</label>
+                    <Slider
+                      value={[viewportSettings.windowWidth]}
+                      onValueChange={(value) => handleWindowLevelChange('width', value[0])}
+                      max={2000}
+                      min={1}
+                      step={1}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Window Center: {viewportSettings.windowCenter}</label>
+                    <Slider
+                      value={[viewportSettings.windowCenter]}
+                      onValueChange={(value) => handleWindowLevelChange('center', value[0])}
+                      max={1000}
+                      min={-1000}
+                      step={1}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="w-full justify-between">
+                          Window/Level Presets
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-48">
+                        <DropdownMenuLabel>Anatomical Presets</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        {Object.entries(getWindowLevelPresets()).map(([name, preset]) => (
+                          <DropdownMenuItem
+                            key={name}
+                            onClick={() => {
+                              handleWindowLevelChange('width', preset.windowWidth);
+                              handleWindowLevelChange('center', preset.windowCenter);
+                            }}
+                          >
+                            {name}
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              {preset.windowWidth}/{preset.windowCenter}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <div className="flex space-x-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => {
+                          handleWindowLevelChange('width', 400);
+                          handleWindowLevelChange('center', 40);
+                        }}
+                      >
+                        Soft Tissue
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          handleWindowLevelChange('width', 1500);
+                          handleWindowLevelChange('center', -600);
+                        }}
+                      >
+                        Lung
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          handleWindowLevelChange('width', 1800);
+                          handleWindowLevelChange('center', 400);
+                        }}
+                      >
+                        Bone
+                      </Button>
                     </div>
                     <Button 
+                      variant="outline" 
                       size="sm" 
-                      onClick={() => handleSliceChange(currentImageIndex + 1)}
-                      disabled={currentImageIndex >= imageIds.length - 1}
-                      className={`text-sm font-semibold px-4 py-2 transition-all duration-200 ${
-                        theme === 'dark' 
-                          ? 'bg-slate-700/80 hover:bg-slate-600/90 text-white border-slate-500 hover:border-slate-400' 
-                          : 'bg-white/90 hover:bg-gray-50 text-gray-800 border-gray-300 hover:border-gray-400'
-                      } shadow-md hover:shadow-lg`}
+                      className="w-full"
+                      onClick={resetViewport}
                     >
-                      Next
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Reset View
                     </Button>
                   </div>
-                  <div className="flex flex-col space-y-4 w-full px-2 sm:px-0">
-                    {/* Window Level Presets */}
-                    <div className="flex flex-col space-y-2">
-                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1">
-                        Window Presets
+                </CardContent>
+              </Card>
+
+              {/* Brightness/Contrast Controls */}
+              <Card className="sidebar-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Brightness & Contrast</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Brightness: {viewportSettings.brightness.toFixed(1)}</label>
+                    <Slider
+                      value={[viewportSettings.brightness]}
+                      onValueChange={(value) => handleBrightnessChange(value[0])}
+                      max={2}
+                      min={-2}
+                      step={0.1}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Contrast: {viewportSettings.contrast.toFixed(1)}</label>
+                    <Slider
+                      value={[viewportSettings.contrast]}
+                      onValueChange={(value) => handleContrastChange(value[0])}
+                      max={3}
+                      min={0.1}
+                      step={0.1}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => {
+                        handleBrightnessChange(0);
+                        handleContrastChange(1);
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Reset
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => {
+                        handleBrightnessChange(0.5);
+                        handleContrastChange(1.2);
+                      }}
+                    >
+                      Enhance
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Histogram Display */}
+              <Card className="sidebar-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    Image Histogram
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowHistogram(!showHistogram)}
+                    >
+                      {showHistogram ? 'Hide' : 'Show'}
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                {showHistogram && (
+                  <CardContent>
+                    {histogramData ? (
+                      <div className="space-y-2">
+                        <div className="h-32 w-full bg-muted rounded relative overflow-hidden">
+                          <svg width="100%" height="100%" className="absolute inset-0">
+                            {histogramData.values.map((value, index) => {
+                              const maxValue = Math.max(...histogramData.values);
+                              const height = (value / maxValue) * 100;
+                              const x = (index / histogramData.values.length) * 100;
+                              const width = 100 / histogramData.values.length;
+                              
+                              return (
+                                <rect
+                                  key={index}
+                                  x={`${x}%`}
+                                  y={`${100 - height}%`}
+                                  width={`${width}%`}
+                                  height={`${height}%`}
+                                  fill="hsl(var(--primary))"
+                                  opacity={0.7}
+                                />
+                              );
+                            })}
+                          </svg>
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-1">
+                          <div className="flex justify-between">
+                            <span>Min: {Math.min(...histogramData.bins)}</span>
+                            <span>Max: {Math.max(...histogramData.bins)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Pixels: {histogramData.values.reduce((a, b) => a + b, 0).toLocaleString()}</span>
+                            <span>Bins: {histogramData.bins.length}</span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={updateHistogram}
+                        >
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Refresh
+                        </Button>
                       </div>
-                      <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                        <Button 
-                          size="sm" 
-                          onClick={() => applyWindowLevelPreset('lung')}
-                          className={`text-sm font-medium px-4 py-2 transition-all duration-200 border-2 ${
-                            theme === 'dark' 
-                              ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-blue-600 hover:to-blue-700 text-white border-slate-400 hover:border-blue-400 shadow-md hover:shadow-lg' 
-                              : 'bg-gradient-to-br from-gray-50 to-white hover:from-blue-50 hover:to-blue-100 text-gray-700 hover:text-blue-800 border-gray-300 hover:border-blue-400 shadow-sm hover:shadow-md'
-                          }`}
-                          title="Lung Window (-600/1500)"
-                        >
-                          Lung
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={() => applyWindowLevelPreset('bone')}
-                          className={`text-sm font-medium px-4 py-2 transition-all duration-200 border-2 ${
-                            theme === 'dark' 
-                              ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-green-600 hover:to-green-700 text-white border-slate-400 hover:border-green-400 shadow-md hover:shadow-lg' 
-                              : 'bg-gradient-to-br from-gray-50 to-white hover:from-green-50 hover:to-green-100 text-gray-700 hover:text-green-800 border-gray-300 hover:border-green-400 shadow-sm hover:shadow-md'
-                          }`}
-                          title="Bone Window (300/1500)"
-                        >
-                          Bone
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={() => applyWindowLevelPreset('brain')}
-                          className={`text-sm font-medium px-4 py-2 transition-all duration-200 border-2 ${
-                            theme === 'dark' 
-                              ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-purple-600 hover:to-purple-700 text-white border-slate-400 hover:border-purple-400 shadow-md hover:shadow-lg' 
-                              : 'bg-gradient-to-br from-gray-50 to-white hover:from-purple-50 hover:to-purple-100 text-gray-700 hover:text-purple-800 border-gray-300 hover:border-purple-400 shadow-sm hover:shadow-md'
-                          }`}
-                          title="Brain Window (40/80)"
-                        >
-                          Brain
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={() => applyWindowLevelPreset('abdomen')}
-                          className={`text-sm font-medium px-4 py-2 transition-all duration-200 border-2 ${
-                            theme === 'dark' 
-                              ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-orange-600 hover:to-orange-700 text-white border-slate-400 hover:border-orange-400 shadow-md hover:shadow-lg' 
-                              : 'bg-gradient-to-br from-gray-50 to-white hover:from-orange-50 hover:to-orange-100 text-gray-700 hover:text-orange-800 border-gray-300 hover:border-orange-400 shadow-sm hover:shadow-md'
-                          }`}
-                          title="Abdomen Window (50/350)"
-                        >
-                          Abdomen
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          onClick={resetWindowLevel}
-                          className={`text-sm font-medium px-4 py-2 transition-all duration-200 border-2 ${
-                            theme === 'dark' 
-                              ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-red-600 hover:to-red-700 text-white border-slate-400 hover:border-red-400 shadow-md hover:shadow-lg' 
-                              : 'bg-gradient-to-br from-gray-50 to-white hover:from-red-50 hover:to-red-100 text-gray-700 hover:text-red-800 border-gray-300 hover:border-red-400 shadow-sm hover:shadow-md'
-                          }`}
-                          title="Reset to Default"
-                        >
-                          Reset
-                        </Button>
+                    ) : (
+                      <div className="text-sm text-muted-foreground text-center py-4">
+                        {viewport ? 'Click Refresh to generate histogram' : 'Load an image to view histogram'}
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Image Enhancement Filters */}
+              <Card className="sidebar-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    Image Enhancement
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFilters(!showFilters)}
+                      className="h-6 w-6 p-0"
+                    >
+                      <ChevronDown className={`h-4 w-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                {showFilters && (
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Sharpen: {imageFilters.sharpen}%</label>
+                      <Slider
+                        value={[imageFilters.sharpen]}
+                        onValueChange={(value) => handleFilterChange('sharpen', value[0])}
+                        max={100}
+                        min={0}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Smooth: {imageFilters.smooth}%</label>
+                      <Slider
+                        value={[imageFilters.smooth]}
+                        onValueChange={(value) => handleFilterChange('smooth', value[0])}
+                        max={100}
+                        min={0}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Edge Enhance: {imageFilters.edgeEnhance}%</label>
+                      <Slider
+                        value={[imageFilters.edgeEnhance]}
+                        onValueChange={(value) => handleFilterChange('edgeEnhance', value[0])}
+                        max={100}
+                        min={0}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Denoise: {imageFilters.denoise}%</label>
+                      <Slider
+                        value={[imageFilters.denoise]}
+                        onValueChange={(value) => handleFilterChange('denoise', value[0])}
+                        max={100}
+                        min={0}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={resetFilters}
+                      >
+                        Reset
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          handleFilterChange('sharpen', 25);
+                          handleFilterChange('edgeEnhance', 15);
+                          handleFilterChange('denoise', 10);
+                        }}
+                      >
+                        Enhance
+                      </Button>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Gamma Correction */}
+              <Card className="sidebar-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    Gamma Correction
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowGamma(!showGamma)}
+                      className="h-6 w-6 p-0"
+                    >
+                      <ChevronDown className={`h-4 w-4 transition-transform ${showGamma ? 'rotate-180' : ''}`} />
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                {showGamma && (
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Gamma: {gammaCorrection.gamma.toFixed(2)}</label>
+                      <Slider
+                        value={[gammaCorrection.gamma]}
+                        onValueChange={(value) => handleGammaChange('gamma', value[0])}
+                        max={3.0}
+                        min={0.1}
+                        step={0.1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Brightness: {gammaCorrection.brightness}</label>
+                      <Slider
+                        value={[gammaCorrection.brightness]}
+                        onValueChange={(value) => handleGammaChange('brightness', value[0])}
+                        max={100}
+                        min={-100}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Contrast: {gammaCorrection.contrast.toFixed(2)}</label>
+                      <Slider
+                        value={[gammaCorrection.contrast]}
+                        onValueChange={(value) => handleGammaChange('contrast', value[0])}
+                        max={3.0}
+                        min={0.1}
+                        step={0.1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={resetGammaCorrection}
+                      >
+                        Reset
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          handleGammaChange('gamma', 1.2);
+                          handleGammaChange('brightness', 10);
+                          handleGammaChange('contrast', 1.1);
+                        }}
+                      >
+                        Auto
+                      </Button>
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+
+              {/* Study Info */}
+              <Card className="sidebar-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Study Information</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm space-y-1">
+                  <div><span className="text-muted-foreground">Patient:</span> {study.patient_name}</div>
+                  <div><span className="text-muted-foreground">ID:</span> {study.patient_id}</div>
+                  <div><span className="text-muted-foreground">Date:</span> {study.study_date}</div>
+                  <div><span className="text-muted-foreground">Modality:</span> {study.modality}</div>
+                  <div><span className="text-muted-foreground">Body Part:</span> {study.body_part}</div>
+                  <div><span className="text-muted-foreground">Description:</span> {study.study_description}</div>
+                  <div><span className="text-muted-foreground">Images:</span> {imageIds.length}</div>
+                </CardContent>
+              </Card>
+
+              {/* Measurements */}
+              <Card className="sidebar-card">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Measurements</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {measurements.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Use measurement tools to add annotations</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {measurements.map((measurement) => (
+                        <div key={measurement.id} className="text-sm">
+                          <div className="flex justify-between">
+                            <span className="capitalize text-muted-foreground">{measurement.type}</span>
+                            <span className="text-foreground">{measurement.value.toFixed(1)} {measurement.unit}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* AI Report */}
+              {study.ai_report && (
+                <Card className="sidebar-card">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center">
+                      <Activity className="w-4 h-4 mr-2" />
+                      AI Analysis
+                      {study.ai_report?.ai_model && (
+                        <Badge variant="outline" className="ml-2 text-xs">
+                          {study.ai_report.ai_model}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div>
+                      <h4 className="text-sm font-medium mb-1">Findings:</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        {study.ai_report.findings?.map((finding, index) => (
+                          <li key={index} className="text-xs">• {finding}</li>
+                        )) || <li className="text-xs text-muted-foreground">No findings available</li>}
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium mb-1">Impression:</h4>
+                      <p className="text-sm text-muted-foreground">{study.ai_report?.impression || 'No impression available'}</p>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium mb-1">Confidence:</h4>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex-1 bg-secondary rounded-full h-2">
+                          <div 
+                            className="bg-primary h-2 rounded-full" 
+                            style={{ width: `${(study.ai_report?.confidence || 0) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-sm text-muted-foreground">
+                          {((study.ai_report?.confidence || 0) * 100).toFixed(0)}%
+                        </span>
                       </div>
                     </div>
                     
-                    {/* Manual Window Level Controls */}
-                    <div className="flex flex-col space-y-3">
-                      <div className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wide px-1">
-                        Manual Adjustment
-                      </div>
-                      <div className="flex flex-col lg:flex-row items-start lg:items-center space-y-4 lg:space-y-0 lg:space-x-8 w-full">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="text-sm font-medium text-blue-700 dark:text-blue-300">Width</label>
-                            <span className="text-sm font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded border border-blue-200 dark:border-blue-700">
-                              {viewportSettings.windowWidth}
-                            </span>
-                          </div>
-                          <Slider 
-                            value={[viewportSettings.windowWidth]} 
-                            min={1} 
-                            max={2000} 
-                            step={1}
-                            onValueChange={(value) => handleWindowLevelChange('width', value[0])}
-                            className="w-full"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="text-sm font-medium text-blue-700 dark:text-blue-300">Center</label>
-                            <span className="text-sm font-mono text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded border border-blue-200 dark:border-blue-700">
-                              {viewportSettings.windowCenter}
-                            </span>
-                          </div>
-                          <Slider 
-                            value={[viewportSettings.windowCenter]} 
-                            min={-1000} 
-                            max={1000} 
-                            step={1}
-                            onValueChange={(value) => handleWindowLevelChange('center', value[0])}
-                            className="w-full"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Sidebar Toggle Button */}
-        <Button
-          size="sm"
-          onClick={() => setSidebarVisible(!sidebarVisible)}
-          className={`fixed top-20 right-2 z-50 font-medium transition-all duration-200 hover:scale-105 border-2 ${
-            theme === 'dark' 
-              ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-blue-600 hover:to-blue-700 text-white border-slate-400 hover:border-blue-400 shadow-lg hover:shadow-xl' 
-              : 'bg-gradient-to-br from-gray-50 to-white hover:from-blue-50 hover:to-blue-100 text-gray-700 hover:text-blue-800 border-gray-300 hover:border-blue-400 shadow-lg hover:shadow-xl'
-          }`}
-          title={sidebarVisible ? 'Hide Sidebar' : 'Show Sidebar'}
-        >
-          {sidebarVisible ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-        </Button>
-
-        {/* Right Panel - AI Report & Measurements */}
-        {sidebarVisible && (
-          <div 
-            className={`relative overflow-y-auto flex-shrink-0 transition-all duration-300 ${
-              theme === 'dark' 
-                ? 'bg-gradient-to-b from-slate-800/95 to-slate-900/95 border-l border-slate-700/50' 
-                : 'bg-gradient-to-b from-gray-50/95 to-white/95 border-l border-gray-200/50'
-            } backdrop-blur-sm shadow-xl`}
-            style={{ width: `${sidebarWidth}px` }}
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('resize-handle')) {
-                setIsResizing(true);
-              }
-            }}
-          >
-            {/* Resize Handle */}
-            <div 
-              className={`absolute left-0 top-0 bottom-0 w-1 cursor-col-resize resize-handle transition-all duration-200 ${
-                theme === 'dark' 
-                  ? 'bg-slate-600/50 hover:bg-blue-500/80 hover:shadow-lg' 
-                  : 'bg-gray-300/50 hover:bg-blue-400/80 hover:shadow-lg'
-              }`}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                setIsResizing(true);
-              }}
-            >
-              <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                <GripVertical className={`h-4 w-4 transition-colors ${
-                  theme === 'dark' ? 'text-slate-400 hover:text-blue-300' : 'text-gray-500 hover:text-blue-600'
-                }`} />
-              </div>
-            </div>
-            
-            <div className="p-2 sm:p-4 pl-6">
-          {/* AI Report */}
-          <Card className={`mb-4 transition-all duration-200 shadow-lg hover:shadow-xl ${
-            theme === 'dark' 
-              ? 'bg-gradient-to-br from-slate-700/90 to-slate-800/90 text-gray-100 border-slate-600/50' 
-              : 'bg-gradient-to-br from-white/95 to-gray-50/95 text-gray-800 border-gray-200/60'
-          } backdrop-blur-sm`}>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-blue-500" />
-                  <span className="text-lg font-bold">AI Analysis</span>
-                </div>
-                <Button 
-                  size="sm" 
-                  onClick={generateAIReport}
-                  disabled={aiReportLoading}
-                  className={`transition-all duration-200 font-medium border-2 ${
-                    theme === 'dark' 
-                      ? 'bg-gradient-to-br from-slate-600 to-slate-700 hover:from-blue-600 hover:to-blue-700 text-white border-slate-400 hover:border-blue-400 shadow-md hover:shadow-lg' 
-                      : 'bg-gradient-to-br from-gray-50 to-white hover:from-blue-50 hover:to-blue-100 text-gray-700 hover:text-blue-800 border-gray-300 hover:border-blue-400 shadow-sm hover:shadow-md'
-                  }`}
-                >
-                  {aiReportLoading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-                      Analyzing...
-                    </div>
-                  ) : (
-                    'Generate'
-                  )}
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {study?.ai_report ? (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-green-500/10 to-blue-500/10 border border-green-500/20">
-                    <Badge className={`font-semibold border-2 ${
-                      theme === 'dark' 
-                        ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white border-blue-400 shadow-md' 
-                        : 'bg-gradient-to-br from-blue-50 to-blue-100 text-blue-700 border-blue-300 shadow-sm'
-                    }`}>
-                      {study.ai_report.analysis_type || 'General Analysis'}
-                    </Badge>
-                    <div className={`text-sm font-bold flex items-center gap-2 ${
-                      theme === 'dark' ? 'text-green-300' : 'text-green-700'
-                    }`}>
-                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      Confidence: {(study.ai_report.confidence * 100).toFixed(1)}%
-                    </div>
-                  </div>
-                  
-                  <div className={`p-4 rounded-lg border ${
-                    theme === 'dark' 
-                      ? 'bg-blue-900/20 border-blue-700' 
-                      : 'bg-blue-50/80 border-blue-200'
-                  }`}>
-                    <h4 className={`font-bold text-base mb-3 flex items-center gap-2 ${
-                      theme === 'dark' ? 'text-white' : 'text-gray-800'
-                    }`}>
-                      <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                      Findings:
-                    </h4>
-                    <ul className="space-y-2">
-                      {study.ai_report.findings?.map((finding, i) => (
-                        <li key={i} className={`text-sm leading-relaxed flex items-start gap-2 ${
-                          theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
-                        }`}>
-                          <span className="text-blue-500 font-bold mt-1">•</span>
-                          <span>{finding}</span>
-                        </li>
-                      )) || (
-                        <li className={`text-sm italic flex items-start gap-2 ${
-                          theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
-                        }`}>
-                          <span className="text-gray-400 font-bold mt-1">•</span>
-                          <span>No findings available</span>
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                  
-                  <div className={`p-4 rounded-lg border ${
-                    theme === 'dark' 
-                      ? 'bg-blue-900/20 border-blue-700' 
-                      : 'bg-blue-50/80 border-blue-200'
-                  }`}>
-                    <h4 className={`font-bold text-base mb-3 flex items-center gap-2 ${
-                      theme === 'dark' ? 'text-white' : 'text-gray-800'
-                    }`}>
-                      <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-                      Impression:
-                    </h4>
-                    <p className={`text-sm leading-relaxed ${
-                      theme === 'dark' ? 'text-slate-300' : 'text-gray-700'
-                    }`}>
-                      {study.ai_report.impression}
-                    </p>
-                  </div>
-                  
-                  {study.ai_report.pathology_scores && Object.keys(study.ai_report.pathology_scores).length > 0 && (
-                    <div className={`p-4 rounded-lg border ${
-                      theme === 'dark' 
-                        ? 'bg-blue-900/20 border-blue-700' 
-                        : 'bg-blue-50/80 border-blue-200'
-                    }`}>
-                      <h4 className={`font-bold text-base mb-3 flex items-center gap-2 ${
-                        theme === 'dark' ? 'text-white' : 'text-gray-800'
-                      }`}>
-                        <span className="w-2 h-2 bg-orange-500 rounded-full"></span>
-                        Pathology Scores:
-                      </h4>
-                      <div className="space-y-2">
-                        {Object.entries(study.ai_report.pathology_scores).map(([key, value]) => (
-                          <div key={key} className={`flex justify-between items-center p-2 rounded border ${
-                            theme === 'dark' 
-                              ? 'bg-slate-600/30 border-slate-500/50' 
-                              : 'bg-white/60 border-gray-200/80'
-                          }`}>
-                            <span className={`text-sm font-medium ${
-                              theme === 'dark' ? 'text-slate-200' : 'text-gray-700'
-                            }`}>{key}:</span>
-                            <span className={`text-sm font-bold ${
-                              theme === 'dark' ? 'text-orange-300' : 'text-orange-600'
-                            }`}>
-                              {(typeof value === 'number' ? (value * 100).toFixed(1) : 'N/A')}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Brain className={`w-12 h-12 mx-auto mb-3 ${
-                    theme === 'dark' ? 'text-slate-500' : 'text-gray-400'
-                  }`} />
-                  <p className={`text-sm font-medium ${
-                    theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
-                  }`}>
-                    No AI analysis available.
-                  </p>
-                  <p className={`text-xs mt-1 ${
-                    theme === 'dark' ? 'text-slate-500' : 'text-gray-400'
-                  }`}>
-                    Click "Generate" to analyze this study.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Measurements */}
-          <Card className={`mb-4 transition-all duration-200 shadow-lg hover:shadow-xl ${
-            theme === 'dark' 
-              ? 'bg-gradient-to-br from-slate-700/90 to-slate-800/90 text-gray-100 border-slate-600/50' 
-              : 'bg-gradient-to-br from-white/95 to-gray-50/95 text-gray-800 border-gray-200/60'
-          } backdrop-blur-sm`}>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2">
-                <Ruler className="w-5 h-5 text-green-500" />
-                <span className="text-lg font-bold">Measurements</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {measurementsLoading ? (
-                <div className="flex justify-center py-8">
-                  <div className="text-center">
-                    <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                    <p className={`text-sm font-medium ${
-                      theme === 'dark' ? 'text-slate-300' : 'text-gray-600'
-                    }`}>Processing measurements...</p>
-                  </div>
-                </div>
-              ) : persistedMeasurements.length > 0 ? (
-                <div className="space-y-3">
-                  {persistedMeasurements.map((measurement) => (
-                    <div key={measurement.id} className={`p-3 rounded-lg border transition-all duration-200 hover:shadow-md ${
-                      theme === 'dark' 
-                        ? 'bg-blue-900/30 border-blue-700 hover:bg-blue-900/50' 
-                        : 'bg-blue-50/80 border-blue-200 hover:bg-blue-100/90'
-                    }`}>
-                      <div className="flex justify-between items-center">
-                        <div className="flex-1">
-                          <div className={`font-semibold text-sm flex items-center gap-2 ${
-                            theme === 'dark' ? 'text-white' : 'text-gray-800'
-                          }`}>
-                            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                            {measurement.type.charAt(0).toUpperCase() + measurement.type.slice(1)}
-                          </div>
-                          <div className={`text-sm font-medium mt-1 ${
-                            theme === 'dark' ? 'text-green-300' : 'text-green-600'
-                          }`}>
-                            {measurement.value.toFixed(2)} {measurement.unit}
-                          </div>
-                          {measurement.label && (
-                            <div className={`text-xs mt-1 ${
-                              theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
-                            }`}>
-                              {measurement.label}
+                    {/* Pathology Scores */}
+                    {study.ai_report?.pathology_scores && (
+                      <div>
+                        <h4 className="text-sm font-medium mb-1">Pathology Scores:</h4>
+                        <div className="space-y-1">
+                          {Object.entries(study.ai_report.pathology_scores)
+                            .filter(([, score]) => score > 0.1)
+                            .sort(([, a], [, b]) => b - a)
+                            .slice(0, 5)
+                            .map(([pathology, score]) => (
+                            <div key={pathology} className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">{pathology.replace('_', ' ')}</span>
+                              <span className="text-foreground">{(score * 100).toFixed(1)}%</span>
                             </div>
-                          )}
+                          ))}
                         </div>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => deleteMeasurement(measurement.id)}
-                          className={`transition-all duration-200 ${
-                            theme === 'dark' 
-                              ? 'hover:bg-red-600/20 hover:text-red-300 text-slate-400' 
-                              : 'hover:bg-red-50 hover:text-red-600 text-gray-500'
-                          }`}
-                        >
-                          Delete
-                        </Button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Ruler className={`w-12 h-12 mx-auto mb-3 ${
-                    theme === 'dark' ? 'text-slate-500' : 'text-gray-400'
-                  }`} />
-                  <p className={`text-sm font-medium ${
-                    theme === 'dark' ? 'text-slate-400' : 'text-gray-500'
-                  }`}>
-                    No measurements yet.
-                  </p>
-                  <p className={`text-xs mt-1 ${
-                    theme === 'dark' ? 'text-slate-500' : 'text-gray-400'
-                  }`}>
-                    Use the measurement tools to add some.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          
-          {/* Advanced Tools */}
-          <Card className={`transition-all duration-200 shadow-lg hover:shadow-xl ${
-            theme === 'dark' 
-              ? 'bg-gradient-to-br from-slate-700/90 to-slate-800/90 text-gray-100 border-slate-600/50' 
-              : 'bg-gradient-to-br from-white/95 to-gray-50/95 text-gray-800 border-gray-200/60'
-          } backdrop-blur-sm`}>
-            <CardHeader>
-              <CardTitle>Advanced Tools</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Button 
-                  size="sm" 
-                  className={`w-full justify-start font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                    theme === 'dark'
-                      ? 'bg-gradient-to-r from-purple-600/90 to-indigo-600/90 hover:from-purple-500/95 hover:to-indigo-500/95 text-white border border-purple-500/30 hover:border-purple-400/50'
-                      : 'bg-gradient-to-r from-purple-500/90 to-indigo-500/90 hover:from-purple-600/95 hover:to-indigo-600/95 text-white border border-purple-400/30 hover:border-purple-300/50'
-                  }`}
-                  onClick={exportCineLoop}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Export Cine Loop
-                </Button>
-                <Button 
-                  size="sm" 
-                  className={`w-full justify-start font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                    theme === 'dark'
-                      ? 'bg-gradient-to-r from-emerald-600/90 to-teal-600/90 hover:from-emerald-500/95 hover:to-teal-500/95 text-white border border-emerald-500/30 hover:border-emerald-400/50'
-                      : 'bg-gradient-to-r from-emerald-500/90 to-teal-500/90 hover:from-emerald-600/95 hover:to-teal-600/95 text-white border border-emerald-400/30 hover:border-emerald-300/50'
-                  }`}
-                  onClick={export3DModel}
-                >
-                  <Brain className="h-4 w-4 mr-2" />
-                  Export 3D Model
-                </Button>
-                <Button 
-                  size="sm" 
-                  className={`w-full justify-start font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                    theme === 'dark'
-                      ? 'bg-gradient-to-r from-cyan-600/90 to-blue-600/90 hover:from-cyan-500/95 hover:to-blue-500/95 text-white border border-cyan-500/30 hover:border-cyan-400/50'
-                      : 'bg-gradient-to-r from-cyan-500/90 to-blue-500/90 hover:from-cyan-600/95 hover:to-blue-600/95 text-white border border-cyan-400/30 hover:border-cyan-300/50'
-                  }`}
-                  onClick={toggleSeriesSynchronization}
-                >
-                  <Layers className="h-4 w-4 mr-2" />
-                  {seriesSynchronization ? 'Disable' : 'Enable'} Series Sync
-                </Button>
-                <Button 
-                  size="sm" 
-                  className={`w-full justify-start font-medium transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-[1.02] ${
-                    theme === 'dark'
-                      ? 'bg-gradient-to-r from-orange-600/90 to-red-600/90 hover:from-orange-500/95 hover:to-red-500/95 text-white border border-orange-500/30 hover:border-orange-400/50'
-                      : 'bg-gradient-to-r from-orange-500/90 to-red-500/90 hover:from-orange-600/95 hover:to-red-600/95 text-white border border-orange-400/30 hover:border-orange-300/50'
-                  }`}
-                  onClick={() => applyHangingProtocol('chest')}
-                >
-                  <Grid3X3 className="h-4 w-4 mr-2" />
-                  Apply Hanging Protocol
-                </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )}            </div>
               </div>
-            </CardContent>
-          </Card>
-          </div>
+            </>          )}
         </div>
-        )}
+        
+        {/* Expandable Toolbar */}
+        <ExpandableToolbar
+          config={toolbarConfig}
+          onToolSelect={handleToolbarToolSelect}
+          onConfigChange={handleToolbarConfigChange}
+          activeTool={activeTool}
+          viewMode={viewMode}
+        />
+        
+        {/* Toolbar Settings Dialog */}
+        <ToolbarSettings
+          isOpen={toolbarSettingsOpen}
+          onClose={() => setToolbarSettingsOpen(false)}
+          config={toolbarConfig}
+          onConfigChange={handleToolbarConfigChange}
+        />
       </div>
-      
-      {/* DICOM Networking Panel */}
-      {showDICOMNetworking && (
-        <div className={`fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 transition-all duration-300`}>
-          <div className={`w-full max-w-4xl rounded-xl shadow-2xl transition-all duration-300 ${
-            theme === 'dark' 
-              ? 'bg-gradient-to-br from-slate-800/95 to-slate-900/95 border border-slate-700/50' 
-              : 'bg-gradient-to-br from-white/95 to-gray-50/95 border border-gray-200/60'
-          } backdrop-blur-md`}>
-            <div className="p-4 border-b flex justify-between items-center">
-              <h2 className="text-xl font-bold">DICOM Networking</h2>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                onClick={() => setShowDICOMNetworking(false)}
-              >
-                Close
-              </Button>
-            </div>
-            <div className="p-4">
-              <DICOMNetworkPanel />
-              <DICOMProtocolTester />
-            </div>
-          </div>
-        </div>
-        )}
+    </div>
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input'
 import { Textarea } from '../components/ui/textarea'
 import { Badge } from '../components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog'
-import { FileText, Brain, Save, Send, Download, Share, Eye, ArrowLeft } from 'lucide-react'
+import { FileText, Brain, Save, Send, Download, Share, Eye, ArrowLeft, User } from 'lucide-react'
 
 interface AIReport {
   findings: string
@@ -17,7 +17,7 @@ interface AIReport {
 }
 
 interface Study {
-  id: number
+  id: string
   patient: {
     first_name: string
     last_name: string
@@ -33,6 +33,14 @@ interface Study {
   radiologist_report: string | null
   status: string
   created_at: string
+  radiologist_info?: {
+    name: string
+    license_number: string
+    board_certification: string
+    certification_expiry?: string
+    updated_at?: string
+  }
+  report_status?: string
 }
 
 const ReportEditor: React.FC = () => {
@@ -49,10 +57,6 @@ const ReportEditor: React.FC = () => {
   const [shareEmail, setShareEmail] = useState('')
 
   const API_URL = 'http://127.0.0.1:8000'
-
-  useEffect(() => {
-    fetchStudy()
-  }, [studyId, fetchStudy])
 
   const fetchStudy = useCallback(async () => {
     try {
@@ -93,7 +97,24 @@ const ReportEditor: React.FC = () => {
         }
         
         if (studyData.radiologist_report) {
-          setReportContent(studyData.radiologist_report)
+          try {
+            const radiologistReport = JSON.parse(studyData.radiologist_report)
+            setFindings(radiologistReport.findings || '')
+            setImpression(radiologistReport.impression || '')
+            setReportContent(radiologistReport.content || '')
+            
+            // Store radiologist info for display
+            if (radiologistReport.radiologist_info) {
+              setStudy(prev => prev ? {
+                ...prev,
+                radiologist_info: radiologistReport.radiologist_info,
+                report_status: radiologistReport.status
+              } : null)
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse radiologist report JSON:', parseError)
+            setReportContent(studyData.radiologist_report)
+          }
         }
       } else {
         const errorText = await response.text()
@@ -107,6 +128,10 @@ const ReportEditor: React.FC = () => {
       setLoading(false)
     }
   }, [studyId, token])
+
+  useEffect(() => {
+    fetchStudy()
+  }, [fetchStudy])
 
   const saveReport = async () => {
     setSaving(true)
@@ -290,56 +315,41 @@ const ReportEditor: React.FC = () => {
               <CardContent className="space-y-4">
                 {study.ai_report && (() => {
                   try {
-                    let aiReport;
-                    if (typeof study.ai_report === 'string') {
-                      const jsonString = study.ai_report
-                        .replace(/'/g, '"')
-                        .replace(/True/g, 'true')
-                        .replace(/False/g, 'false')
-                        .replace(/None/g, 'null');
-                      aiReport = JSON.parse(jsonString);
-                    } else {
-                      aiReport = study.ai_report;
-                    }
+                    const aiReport = study.ai_report;
                     
                     return (
                       <>
                         <div>
                           <h4 className="font-medium mb-2">AI Findings:</h4>
                           <div className="text-sm text-gray-600 space-y-1">
-                            {aiReport.findings?.map((finding: string, index: number) => (
-                              <div key={index}>• {finding}</div>
-                            )) || <div>No specific findings detected</div>}
+                            <div>{aiReport.findings || 'No specific findings detected'}</div>
                           </div>
                         </div>
                         <div>
                           <h4 className="font-medium mb-2">AI Impression:</h4>
                           <p className="text-sm text-gray-600">{aiReport.impression || 'No impression available'}</p>
                         </div>
-                        <div>
-                          <h4 className="font-medium mb-2">AI Model:</h4>
-                          <p className="text-sm text-gray-500">{aiReport.ai_model || 'Unknown'} ({aiReport.ai_version || 'v1.0'})</p>
-                        </div>
+
                         <div>
                           <h4 className="font-medium mb-2">Confidence:</h4>
                           <div className="flex items-center space-x-2">
                             <div className="flex-1 bg-gray-200 rounded-full h-2">
                               <div 
                                 className="bg-blue-500 h-2 rounded-full" 
-                                style={{ width: `${(aiReport.confidence || 0) * 100}%` }}
+                                style={{ width: `${(aiReport.confidence_score || 0) * 100}%` }}
                               />
                             </div>
                             <span className="text-sm">
-                              {((aiReport.confidence || 0) * 100).toFixed(0)}%
+                              {((aiReport.confidence_score || 0) * 100).toFixed(0)}%
                             </span>
                           </div>
                         </div>
                         <div>
                           <h4 className="font-medium mb-2">Analysis Details:</h4>
                           <div className="text-xs text-gray-500 space-y-1">
-                            <div>Modality: {aiReport.modality || 'Unknown'}</div>
-                            <div>Body Part: {aiReport.body_part || 'Unknown'}</div>
-                            <div>Generated: {aiReport.generated_at ? new Date(aiReport.generated_at).toLocaleString() : 'Unknown'}</div>
+                            <div>Modality: {study.modality || 'Unknown'}</div>
+                            <div>Body Part: {study.body_part || 'Unknown'}</div>
+                            <div>Generated: {study.created_at ? new Date(study.created_at).toLocaleString() : 'Unknown'}</div>
                           </div>
                         </div>
                       </>
@@ -358,6 +368,47 @@ const ReportEditor: React.FC = () => {
                 })()}
               </CardContent>
             </Card>
+
+            {/* Radiologist Information - Show when report is finalized */}
+            {study?.radiologist_info && study?.report_status === 'final' && (
+              <Card className="mt-4">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <User className="h-5 w-5 mr-2 text-green-600" />
+                    Report Certified By
+                    <Badge variant="default" className="ml-2 bg-green-600">FINALIZED</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <h4 className="font-medium mb-1">Radiologist:</h4>
+                    <p className="text-sm text-gray-700">{study.radiologist_info.name}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-1">Medical License:</h4>
+                    <p className="text-sm text-gray-700">{study.radiologist_info.license_number}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium mb-1">Board Certification:</h4>
+                    <p className="text-sm text-gray-700">{study.radiologist_info.board_certification}</p>
+                  </div>
+                  {study.radiologist_info.certification_expiry && (
+                    <div>
+                      <h4 className="font-medium mb-1">Certification Valid Until:</h4>
+                      <p className="text-sm text-gray-700">
+                        {new Date(study.radiologist_info.certification_expiry).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                  <div>
+                    <h4 className="font-medium mb-1">Report Finalized:</h4>
+                    <p className="text-sm text-gray-700">
+                      {study.radiologist_info.updated_at ? new Date(study.radiologist_info.updated_at).toLocaleString() : 'Unknown'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Report Editor */}

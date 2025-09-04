@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import fs from 'fs'
 
+
+
 // Plugin to handle GLSL files as text
 const glslPlugin = () => {
   return {
@@ -36,11 +38,34 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['vtk.js'],
     include: [
-      'cornerstone-core',
+      'cornerstone-core', 
       'cornerstone-tools', 
-      'cornerstone-wado-image-loader',
-      'dicom-parser'
-    ],
+      'cornerstone-wado-image-loader', 
+      'dicom-parser',
+      'globalthis',
+      'fast-deep-equal',
+      'seedrandom',
+      'spark-md5'
+    ]
   },
+  define: {
+    global: 'globalThis',
+    'process.env': {},
+  },
+  build: {
+    rollupOptions: {
+      external: [],
+      output: {
+        manualChunks: {
+          vtk: ['@kitware/vtk.js', 'vtk.js']
+        }
+      }
+    }
+  },
+  server: {
+    fs: {
+      allow: ['..', '..']
+    }
+  }
 })
 
