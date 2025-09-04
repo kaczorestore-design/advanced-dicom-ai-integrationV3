@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -24,9 +24,10 @@ interface DICOMStudy {
 
 interface DICOMNetworkPanelProps {
   onStudySelected?: (study: DICOMStudy) => void;
+  theme?: 'dark' | 'light';
 }
 
-export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySelected }) => {
+export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySelected, theme = 'light' }) => {
   const [networkService, setNetworkService] = useState<DICOMNetworkService | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [searchResults, setSearchResults] = useState<DICOMStudy[]>([]);
@@ -54,11 +55,7 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
     }
   });
 
-  useEffect(() => {
-    initializeNetworkService();
-  }, [useDIMSE, initializeNetworkService]);
-
-  const initializeNetworkService = () => {
+  const initializeNetworkService = useCallback(() => {
     const dicomwebConfig: DICOMwebConfig = {
       ...config.dicomweb,
       authToken: localStorage.getItem('token') || ''
@@ -72,7 +69,11 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
     );
 
     setNetworkService(service);
-  };
+  }, [config, useDIMSE]);
+
+  useEffect(() => {
+    initializeNetworkService();
+  }, [initializeNetworkService]);
 
   const testConnection = async () => {
     if (!networkService) return;
@@ -103,8 +104,9 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
     if (!networkService) return;
 
     try {
-      const studyUID = useDIMSE ? study['0020,000D'] : study['0020000D'].Value[0];
-      await networkService.retrieveStudy(studyUID, useDIMSE);
+      const studyUID = useDIMSE ? study['0020,000D'] : study['0020000D']?.Value?.[0];
+      if (!studyUID) return;
+      await networkService.retrieveStudy(studyUID as string, useDIMSE);
       
       if (onStudySelected) {
         onStudySelected(study);
@@ -281,7 +283,7 @@ export const DICOMNetworkPanel: React.FC<DICOMNetworkPanelProps> = ({ onStudySel
             <div className="max-h-40 overflow-y-auto space-y-2">
               {searchResults.map((study, index) => {
                 const patientID = useDIMSE ? study['0010,0020'] : study['00100020']?.Value?.[0];
-                const patientName = useDIMSE ? study['0010,0010'] : study['00100010']?.Value?.[0]?.Alphabetic;
+                const patientName = useDIMSE ? study['0010,0010'] : (study['00100010']?.Value?.[0] as { Alphabetic?: string })?.Alphabetic;
                 const studyDate = useDIMSE ? study['0008,0020'] : study['00080020']?.Value?.[0];
                 const modality = useDIMSE ? study['0008,0060'] : study['00080060']?.Value?.[0];
 

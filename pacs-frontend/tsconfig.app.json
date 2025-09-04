@@ -29,6 +29,7 @@
     "noUncheckedSideEffectImports": true
   },
   "include": ["src"],
+  "exclude": ["src/components/DicomViewer.backup.tsx"],
   "typeRoots": ["./node_modules/@types", "./src/types"]
 }
 

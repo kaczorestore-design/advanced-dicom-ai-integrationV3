@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import * as dicomParser from 'dicom-parser';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -7,194 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Slider } from './ui/slider';
 import { Switch } from './ui/switch';
-import { Monitor, Upload, Eye, Settings, Palette, Layers, Image, RotateCw, ZoomIn, Contrast, Gamma } from 'lucide-react';
+import { Monitor, Upload, Eye, Settings, Palette, Layers, Image, RotateCw, Contrast } from 'lucide-react';
+import { GSPSPresentationState, ReferencedImage, DisplayedAreaSelection, SoftcopyVOILUT, SoftcopyPresentationLUT, GraphicAnnotation, GraphicObject, TextObject, GraphicLayer, SpatialTransformation, OverlayActivation, VOILUT, PresentationLUT, ModalityLUT, DisplayShutter, BitmapDisplayShutter } from '../types/medical';
 
-interface GSPSPresentationState {
-  sopInstanceUID: string;
-  sopClassUID: string;
-  studyInstanceUID: string;
-  seriesInstanceUID: string;
-  instanceNumber: number;
-  contentDate?: string;
-  contentTime?: string;
-  contentLabel?: string;
-  contentDescription?: string;
-  contentCreatorName?: string;
-  referencedImageSequence: ReferencedImage[];
-  displayedAreaSelectionSequence?: DisplayedAreaSelection[];
-  softcopyVOILUTSequence?: SoftcopyVOILUT[];
-  softcopyPresentationLUTSequence?: SoftcopyPresentationLUT[];
-  graphicAnnotationSequence?: GraphicAnnotation[];
-  textObjectSequence?: TextObject[];
-  graphicLayerSequence?: GraphicLayer[];
-  spatialTransformationSequence?: SpatialTransformation[];
-  overlayActivationSequence?: OverlayActivation[];
-  modalityLUTSequence?: ModalityLUT[];
-  displayShutterSequence?: DisplayShutter[];
-  bitmapDisplayShutterSequence?: BitmapDisplayShutter[];
-  shutterPresentationValue?: number;
-  shutterOverlayGroup?: number;
-  presentationSizeMode?: string;
-  presentationPixelSpacing?: number[];
-  presentationPixelAspectRatio?: number[];
-  presentationPixelMagnificationRatio?: number;
-  imageRotation?: number;
-  imageHorizontalFlip?: string;
-  imageVerticalFlip?: string;
-  requestingPhysician?: string;
-  institutionName?: string;
-  institutionalDepartmentName?: string;
-  manufacturer?: string;
-  manufacturerModelName?: string;
-  deviceSerialNumber?: string;
-  softwareVersions?: string;
-  illumination?: number;
-  reflectedAmbientLight?: number;
-}
-
-interface ReferencedImage {
-  referencedSOPClassUID: string;
-  referencedSOPInstanceUID: string;
-  referencedFrameNumber?: number[];
-  referencedSegmentNumber?: number[];
-}
-
-interface DisplayedAreaSelection {
-  referencedImageSequence: ReferencedImage[];
-  displayedAreaTopLeftHandCorner: number[];
-  displayedAreaBottomRightHandCorner: number[];
-  presentationSizeMode: string;
-  presentationPixelSpacing?: number[];
-  presentationPixelAspectRatio?: number[];
-  presentationPixelMagnificationRatio?: number;
-}
-
-interface SoftcopyVOILUT {
-  referencedImageSequence: ReferencedImage[];
-  voiLUTSequence?: VOILUT[];
-  windowCenter?: number[];
-  windowWidth?: number[];
-  windowCenterWidthExplanation?: string;
-  voiLUTFunction?: string;
-}
-
-interface SoftcopyPresentationLUT {
-  referencedImageSequence: ReferencedImage[];
-  presentationLUTSequence?: PresentationLUT[];
-  presentationLUTShape?: string;
-}
-
-interface VOILUT {
-  lutDescriptor: number[];
-  lutExplanation?: string;
-  lutData: number[];
-}
-
-interface PresentationLUT {
-  lutDescriptor: number[];
-  lutExplanation?: string;
-  presentationLUTShape?: string;
-  lutData?: number[];
-}
-
-interface GraphicAnnotation {
-  graphicLayer?: string;
-  textObjectSequence?: TextObject[];
-  graphicObjectSequence?: GraphicObject[];
-  referencedImageSequence?: ReferencedImage[];
-}
-
-interface GraphicObject {
-  graphicAnnotationUnits: string;
-  graphicDimensions: number;
-  numberOfGraphicPoints: number;
-  graphicData: number[];
-  graphicType: string;
-  graphicFilled?: string;
-  lineStyleSequence?: LineStyle[];
-  fillStyleSequence?: FillStyle[];
-}
-
-interface TextObject {
-  boundingBoxAnnotationUnits?: string;
-  anchorPointAnnotationUnits?: string;
-  unformattedTextValue: string;
-  boundingBoxTopLeftHandCorner?: number[];
-  boundingBoxBottomRightHandCorner?: number[];
-  anchorPoint?: number[];
-  anchorPointVisibility?: string;
-  textStyleSequence?: TextStyle[];
-}
-
-interface GraphicLayer {
-  graphicLayer: string;
-  graphicLayerOrder: number;
-  graphicLayerRecommendedDisplayGrayscaleValue?: number;
-  graphicLayerDescription?: string;
-}
-
-interface SpatialTransformation {
-  referencedImageSequence: ReferencedImage[];
-  imageRotation?: number;
-  imageHorizontalFlip?: string;
-  imageVerticalFlip?: string;
-}
-
-interface OverlayActivation {
-  overlayGroup: number;
-  overlayActivationLayer?: string;
-}
-
-interface ModalityLUT {
-  lutDescriptor: number[];
-  lutExplanation?: string;
-  modalityLUTType: string;
-  lutData: number[];
-}
-
-interface DisplayShutter {
-  shutterShape: string;
-  shutterLeftVerticalEdge?: number;
-  shutterRightVerticalEdge?: number;
-  shutterUpperHorizontalEdge?: number;
-  shutterLowerHorizontalEdge?: number;
-  centerOfCircularShutter?: number[];
-  radiusOfCircularShutter?: number;
-  verticesOfThePolygonalShutter?: number[];
-}
-
-interface BitmapDisplayShutter {
-  shutterOverlayGroup: number;
-  shutterPresentationValue: number;
-}
-
-interface LineStyle {
-  patternOnColorCIELabValue?: number[];
-  patternOffColorCIELabValue?: number[];
-  lineThickness?: number;
-  lineDashingStyle?: string;
-  linePattern?: number;
-}
-
-interface FillStyle {
-  patternOnColorCIELabValue?: number[];
-  patternOffColorCIELabValue?: number[];
-  fillPattern?: string;
-  fillMode?: string;
-}
-
-interface TextStyle {
-  fontName?: string;
-  fontNameType?: string;
-  cssFont?: string;
-  textColorCIELabValue?: number[];
-  horizontalAlignment?: string;
-  verticalAlignment?: string;
-  shadowStyle?: string;
-  underlined?: string;
-  bold?: string;
-  italic?: string;
-}
 
 interface DICOMGSPSParserProps {
   onGSPSLoaded?: (gsps: GSPSPresentationState) => void;
@@ -228,7 +43,7 @@ export default function DICOMGSPSParser({
   const [illumination, setIllumination] = useState<number>(0);
   const [reflectedAmbientLight, setReflectedAmbientLight] = useState<number>(0);
   const [selectedVOILUT, setSelectedVOILUT] = useState<string>('');
-  const [selectedPresentationLUT, setSelectedPresentationLUT] = useState<string>('');
+  const [_selectedPresentationLUT] = useState<string>('');
 
   // Parse DICOM GSPS file
   const parseDICOMGSPS = useCallback(async (file: File): Promise<GSPSPresentationState> => {
@@ -258,38 +73,38 @@ export default function DICOMGSPSParser({
           const contentCreatorName = dataSet.string('x00700084');
 
           // Extract referenced image sequence
-          const referencedImageSequence = extractReferencedImageSequence(dataSet);
+          const referencedImageSequence = extractReferencedImageSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract displayed area selection sequence
-          const displayedAreaSelectionSequence = extractDisplayedAreaSelectionSequence(dataSet);
+          const displayedAreaSelectionSequence = extractDisplayedAreaSelectionSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract softcopy VOI LUT sequence
-          const softcopyVOILUTSequence = extractSoftcopyVOILUTSequence(dataSet);
+          const softcopyVOILUTSequence = extractSoftcopyVOILUTSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract softcopy presentation LUT sequence
-          const softcopyPresentationLUTSequence = extractSoftcopyPresentationLUTSequence(dataSet);
+          const softcopyPresentationLUTSequence = extractSoftcopyPresentationLUTSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract graphic annotation sequence
-          const graphicAnnotationSequence = extractGraphicAnnotationSequence(dataSet);
+          const graphicAnnotationSequence = extractGraphicAnnotationSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract text object sequence
-          const textObjectSequence = extractTextObjectSequence(dataSet);
+          const textObjectSequence = extractTextObjectSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract graphic layer sequence
-          const graphicLayerSequence = extractGraphicLayerSequence(dataSet);
+          const graphicLayerSequence = extractGraphicLayerSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract spatial transformation sequence
-          const spatialTransformationSequence = extractSpatialTransformationSequence(dataSet);
+          const spatialTransformationSequence = extractSpatialTransformationSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract overlay activation sequence
-          const overlayActivationSequence = extractOverlayActivationSequence(dataSet);
+          const overlayActivationSequence = extractOverlayActivationSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract modality LUT sequence
-          const modalityLUTSequence = extractModalityLUTSequence(dataSet);
+          const modalityLUTSequence = extractModalityLUTSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract display shutter sequence
-          const displayShutterSequence = extractDisplayShutterSequence(dataSet);
-          const bitmapDisplayShutterSequence = extractBitmapDisplayShutterSequence(dataSet);
+          const displayShutterSequence = extractDisplayShutterSequence(dataSet as unknown as Record<string, unknown>);
+          const bitmapDisplayShutterSequence = extractBitmapDisplayShutterSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract shutter information
           const shutterPresentationValue = dataSet.uint16('x00181612');
@@ -297,8 +112,8 @@ export default function DICOMGSPSParser({
 
           // Extract presentation parameters
           const presentationSizeMode = dataSet.string('x00700100');
-          const presentationPixelSpacing = extractFloatArray(dataSet, 'x00700101');
-          const presentationPixelAspectRatio = extractFloatArray(dataSet, 'x00700102');
+          const presentationPixelSpacing = extractFloatArray(dataSet as unknown as Record<string, unknown>, 'x00700101');
+          const presentationPixelAspectRatio = extractFloatArray(dataSet as unknown as Record<string, unknown>, 'x00700102');
           const presentationPixelMagnificationRatio = dataSet.floatString('x00700103');
 
           // Extract transformation parameters
@@ -373,12 +188,12 @@ export default function DICOMGSPSParser({
   }, []);
 
   // Extract referenced image sequence
-  const extractReferencedImageSequence = (dataSet: any): ReferencedImage[] => {
-    const sequence = dataSet.elements.x00081140;
-    if (!sequence || !sequence.items) return [];
+  const extractReferencedImageSequence = (dataSet: Record<string, unknown>): ReferencedImage[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00081140;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { string(tag: string): string };
       const referencedSOPClassUID = itemDataSet.string('x00081150') || '';
       const referencedSOPInstanceUID = itemDataSet.string('x00081155') || '';
       
@@ -404,12 +219,12 @@ export default function DICOMGSPSParser({
   };
 
   // Extract displayed area selection sequence
-  const extractDisplayedAreaSelectionSequence = (dataSet: any): DisplayedAreaSelection[] => {
-    const sequence = dataSet.elements.x00700130;
-    if (!sequence || !sequence.items) return [];
+  const extractDisplayedAreaSelectionSequence = (dataSet: Record<string, unknown>): DisplayedAreaSelection[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700130;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { string(tag: string): string; floatString(tag: string): number };
       const referencedImageSequence = extractReferencedImageSequence(itemDataSet);
       const displayedAreaTopLeftHandCorner = extractIntArray(itemDataSet, 'x00700052') || [];
       const displayedAreaBottomRightHandCorner = extractIntArray(itemDataSet, 'x00700053') || [];
@@ -431,12 +246,12 @@ export default function DICOMGSPSParser({
   };
 
   // Extract softcopy VOI LUT sequence
-  const extractSoftcopyVOILUTSequence = (dataSet: any): SoftcopyVOILUT[] => {
-    const sequence = dataSet.elements.x00282110;
-    if (!sequence || !sequence.items) return [];
+  const extractSoftcopyVOILUTSequence = (dataSet: Record<string, unknown>): SoftcopyVOILUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00282110;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { string(tag: string): string };
       const referencedImageSequence = extractReferencedImageSequence(itemDataSet);
       const voiLUTSequence = extractVOILUTSequence(itemDataSet);
       
@@ -461,12 +276,12 @@ export default function DICOMGSPSParser({
   };
 
   // Extract softcopy presentation LUT sequence
-  const extractSoftcopyPresentationLUTSequence = (dataSet: any): SoftcopyPresentationLUT[] => {
-    const sequence = dataSet.elements.x00282120;
-    if (!sequence || !sequence.items) return [];
+  const extractSoftcopyPresentationLUTSequence = (dataSet: Record<string, unknown>): SoftcopyPresentationLUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00282120;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { string(tag: string): string };
       const referencedImageSequence = extractReferencedImageSequence(itemDataSet);
       const presentationLUTSequence = extractPresentationLUTSequence(itemDataSet);
       const presentationLUTShape = itemDataSet.string('x20500020');
@@ -480,12 +295,12 @@ export default function DICOMGSPSParser({
   };
 
   // Extract graphic annotation sequence
-  const extractGraphicAnnotationSequence = (dataSet: any): GraphicAnnotation[] => {
-    const sequence = dataSet.elements.x00700001;
-    if (!sequence || !sequence.items) return [];
+  const extractGraphicAnnotationSequence = (dataSet: Record<string, unknown>): GraphicAnnotation[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700001;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { string(tag: string): string };
       const graphicLayer = itemDataSet.string('x00700002');
       const textObjectSequence = extractTextObjectSequence(itemDataSet);
       const graphicObjectSequence = extractGraphicObjectSequence(itemDataSet);
@@ -501,12 +316,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract graphic object sequence
-  const extractGraphicObjectSequence = (dataSet: any): GraphicObject[] => {
-    const sequence = dataSet.elements.x00700009;
+  const extractGraphicObjectSequence = (dataSet: Record<string, unknown>): GraphicObject[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700009 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const graphicAnnotationUnits = itemDataSet.string('x00700005') || '';
       const graphicDimensions = itemDataSet.uint16('x00700020') || 2;
       const numberOfGraphicPoints = itemDataSet.uint16('x00700021') || 0;
@@ -526,12 +345,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract text object sequence
-  const extractTextObjectSequence = (dataSet: any): TextObject[] => {
-    const sequence = dataSet.elements.x00700008;
+  const extractTextObjectSequence = (dataSet: Record<string, unknown>): TextObject[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700008 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const boundingBoxAnnotationUnits = itemDataSet.string('x00700003');
       const anchorPointAnnotationUnits = itemDataSet.string('x00700004');
       const unformattedTextValue = itemDataSet.string('x00700006') || '';
@@ -553,12 +376,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract graphic layer sequence
-  const extractGraphicLayerSequence = (dataSet: any): GraphicLayer[] => {
-    const sequence = dataSet.elements.x00700060;
+  const extractGraphicLayerSequence = (dataSet: Record<string, unknown>): GraphicLayer[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700060 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const graphicLayer = itemDataSet.string('x00700002') || '';
       const graphicLayerOrder = itemDataSet.uint16('x00700062') || 0;
       const graphicLayerRecommendedDisplayGrayscaleValue = itemDataSet.uint16('x00700066');
@@ -574,16 +401,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract spatial transformation sequence
-  const extractSpatialTransformationSequence = (dataSet: any): SpatialTransformation[] => {
-    const sequence = dataSet.elements.x00700210;
+  const extractSpatialTransformationSequence = (dataSet: Record<string, unknown>): SpatialTransformation[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700210 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown>;
       const referencedImageSequence = extractReferencedImageSequence(itemDataSet);
-      const imageRotation = itemDataSet.uint16('x00700042');
-      const imageHorizontalFlip = itemDataSet.string('x00700041');
-      const imageVerticalFlip = itemDataSet.string('x00700043');
+      const imageRotation = (itemDataSet as Record<string, unknown> & { uint16(tag: string): number }).uint16('x00700042');
+      const imageHorizontalFlip = (itemDataSet as Record<string, unknown> & { string(tag: string): string }).string('x00700041');
+      const imageVerticalFlip = (itemDataSet as Record<string, unknown> & { string(tag: string): string }).string('x00700043');
 
       return {
         referencedImageSequence,
@@ -595,12 +422,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract overlay activation sequence
-  const extractOverlayActivationSequence = (dataSet: any): OverlayActivation[] => {
-    const sequence = dataSet.elements.x00700260;
+  const extractOverlayActivationSequence = (dataSet: Record<string, unknown>): OverlayActivation[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700260 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const overlayGroup = itemDataSet.uint16('x00700262') || 0;
       const overlayActivationLayer = itemDataSet.string('x00700264');
 
@@ -612,12 +443,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract VOI LUT sequence
-  const extractVOILUTSequence = (dataSet: any): VOILUT[] => {
-    const sequence = dataSet.elements.x00283010;
+  const extractVOILUTSequence = (dataSet: Record<string, unknown>): VOILUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00283010 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const lutDescriptor = extractIntArray(itemDataSet, 'x00283002') || [];
       const lutExplanation = itemDataSet.string('x00283003');
       const lutData = extractIntArray(itemDataSet, 'x00283006') || [];
@@ -631,12 +466,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract presentation LUT sequence
-  const extractPresentationLUTSequence = (dataSet: any): PresentationLUT[] => {
-    const sequence = dataSet.elements.x20500010;
+  const extractPresentationLUTSequence = (dataSet: Record<string, unknown>): PresentationLUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x20500010 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const lutDescriptor = extractIntArray(itemDataSet, 'x00283002') || [];
       const lutExplanation = itemDataSet.string('x00283003');
       const presentationLUTShape = itemDataSet.string('x20500020');
@@ -652,12 +491,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract modality LUT sequence
-  const extractModalityLUTSequence = (dataSet: any): ModalityLUT[] => {
-    const sequence = dataSet.elements.x00283000;
+  const extractModalityLUTSequence = (dataSet: Record<string, unknown>): ModalityLUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00283000 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const lutDescriptor = extractIntArray(itemDataSet, 'x00283002') || [];
       const lutExplanation = itemDataSet.string('x00283003');
       const modalityLUTType = itemDataSet.string('x00283004') || '';
@@ -673,23 +516,24 @@ export default function DICOMGSPSParser({
   };
 
   // Extract display shutter sequence
-  const extractDisplayShutterSequence = (dataSet: any): DisplayShutter[] => {
+  const extractDisplayShutterSequence = (dataSet: Record<string, unknown>): DisplayShutter[] => {
     const shutters: DisplayShutter[] = [];
     
-    const shutterShape = dataSet.string('x00181600');
+    const shutterShape = (dataSet as Record<string, unknown> & { string(tag: string): string }).string('x00181600');
     if (shutterShape) {
       const shutter: DisplayShutter = {
         shutterShape
       };
       
       if (shutterShape === 'RECTANGULAR') {
-        shutter.shutterLeftVerticalEdge = dataSet.uint16('x00181602');
-        shutter.shutterRightVerticalEdge = dataSet.uint16('x00181604');
-        shutter.shutterUpperHorizontalEdge = dataSet.uint16('x00181606');
-        shutter.shutterLowerHorizontalEdge = dataSet.uint16('x00181608');
+        const dataSetWithMethods = dataSet as Record<string, unknown> & { uint16(tag: string): number };
+        shutter.shutterLeftVerticalEdge = dataSetWithMethods.uint16('x00181602');
+        shutter.shutterRightVerticalEdge = dataSetWithMethods.uint16('x00181604');
+        shutter.shutterUpperHorizontalEdge = dataSetWithMethods.uint16('x00181606');
+        shutter.shutterLowerHorizontalEdge = dataSetWithMethods.uint16('x00181608');
       } else if (shutterShape === 'CIRCULAR') {
         shutter.centerOfCircularShutter = extractIntArray(dataSet, 'x0018160a');
-        shutter.radiusOfCircularShutter = dataSet.uint16('x0018160c');
+        shutter.radiusOfCircularShutter = (dataSet as Record<string, unknown> & { uint16(tag: string): number }).uint16('x0018160c');
       } else if (shutterShape === 'POLYGONAL') {
         shutter.verticesOfThePolygonalShutter = extractIntArray(dataSet, 'x0018160e');
       }
@@ -701,12 +545,16 @@ export default function DICOMGSPSParser({
   };
 
   // Extract bitmap display shutter sequence
-  const extractBitmapDisplayShutterSequence = (dataSet: any): BitmapDisplayShutter[] => {
-    const sequence = dataSet.elements.x00181616;
+  const extractBitmapDisplayShutterSequence = (dataSet: Record<string, unknown>): BitmapDisplayShutter[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00181616 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = (item as Record<string, unknown> & { dataSet: Record<string, unknown> }).dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+        floatString(tag: string): string;
+      };
       const shutterOverlayGroup = itemDataSet.uint16('x00181614') || 0;
       const shutterPresentationValue = itemDataSet.uint16('x00181612') || 0;
 
@@ -718,19 +566,20 @@ export default function DICOMGSPSParser({
   };
 
   // Utility functions
-  const extractIntArray = (dataSet: any, tag: string): number[] | undefined => {
-    const element = dataSet.elements[tag];
+  const extractIntArray = (dataSet: Record<string, unknown>, tag: string): number[] | undefined => {
+    const element = (dataSet.elements as Record<string, unknown>)[tag] as Record<string, unknown> & { length?: number };
     if (!element) return undefined;
     
     const values: number[] = [];
-    for (let i = 0; i < element.length; i += 2) {
-      values.push(dataSet.uint16(tag, i / 2));
+    const dataSetWithMethods = dataSet as Record<string, unknown> & { uint16(tag: string, index?: number): number };
+    for (let i = 0; i < (element.length || 0); i += 2) {
+      values.push(dataSetWithMethods.uint16(tag, i / 2));
     }
     return values;
   };
 
-  const extractFloatArray = (dataSet: any, tag: string): number[] | undefined => {
-    const stringValue = dataSet.string(tag);
+  const extractFloatArray = (dataSet: Record<string, unknown>, tag: string): number[] | undefined => {
+    const stringValue = (dataSet as Record<string, unknown> & { string(tag: string): string }).string(tag);
     if (!stringValue) return undefined;
     
     return stringValue.split('\\').map(Number);
@@ -1267,7 +1116,7 @@ export default function DICOMGSPSParser({
                   {/* Presentation LUTs */}
                   <div>
                     <h4 className="font-medium mb-2 flex items-center space-x-2">
-                      <Gamma className="w-4 h-4" />
+                      <Contrast className="w-4 h-4" />
                       <span>Presentation LUTs ({statistics.presentationLUTs})</span>
                     </h4>
                     {gsps.softcopyPresentationLUTSequence && gsps.softcopyPresentationLUTSequence.length > 0 ? (
@@ -1437,101 +1286,3 @@ export default function DICOMGSPSParser({
     </div>
   );
 }
-
-// Utility function to generate GSPS overlay for Cornerstone
-export const generateGSPSOverlay = (gsps: GSPSPresentationState, imageId: string) => {
-  const overlays: any[] = [];
-  
-  // Process graphic annotations
-  if (gsps.graphicAnnotationSequence) {
-    gsps.graphicAnnotationSequence.forEach((annotation, annotationIndex) => {
-      if (annotation.graphicObjectSequence) {
-        annotation.graphicObjectSequence.forEach((graphicObj, objIndex) => {
-          const overlay = {
-            id: `gsps-graphic-${annotationIndex}-${objIndex}`,
-            type: graphicObj.graphicType.toLowerCase(),
-            data: graphicObj.graphicData,
-            layer: annotation.graphicLayer || 'default',
-            filled: graphicObj.graphicFilled === 'Y',
-            color: 'yellow',
-            lineWidth: 1
-          };
-          overlays.push(overlay);
-        });
-      }
-      
-      if (annotation.textObjectSequence) {
-        annotation.textObjectSequence.forEach((textObj, textIndex) => {
-          const overlay = {
-            id: `gsps-text-${annotationIndex}-${textIndex}`,
-            type: 'text',
-            text: textObj.unformattedTextValue,
-            position: textObj.anchorPoint || textObj.boundingBoxTopLeftHandCorner,
-            layer: annotation.graphicLayer || 'default',
-            color: 'yellow',
-            fontSize: 12
-          };
-          overlays.push(overlay);
-        });
-      }
-    });
-  }
-  
-  // Process text objects
-  if (gsps.textObjectSequence) {
-    gsps.textObjectSequence.forEach((textObj, index) => {
-      const overlay = {
-        id: `gsps-text-${index}`,
-        type: 'text',
-        text: textObj.unformattedTextValue,
-        position: textObj.anchorPoint || textObj.boundingBoxTopLeftHandCorner,
-        layer: 'default',
-        color: 'yellow',
-        fontSize: 12
-      };
-      overlays.push(overlay);
-    });
-  }
-  
-  return overlays;
-};
-
-// Utility function to apply GSPS display settings to Cornerstone viewport
-export const applyGSPSToViewport = (gsps: GSPSPresentationState, viewport: any) => {
-  // Apply VOI LUT settings
-  if (gsps.softcopyVOILUTSequence && gsps.softcopyVOILUTSequence.length > 0) {
-    const voiLUT = gsps.softcopyVOILUTSequence[0];
-    if (voiLUT.windowCenter && voiLUT.windowWidth) {
-      viewport.setVOI({
-        windowCenter: voiLUT.windowCenter[0],
-        windowWidth: voiLUT.windowWidth[0]
-      });
-    }
-  }
-  
-  // Apply spatial transformations
-  if (gsps.imageRotation !== undefined) {
-    viewport.setRotation(gsps.imageRotation);
-  }
-  
-  if (gsps.imageHorizontalFlip === 'Y') {
-    viewport.setFlipHorizontal(true);
-  }
-  
-  if (gsps.imageVerticalFlip === 'Y') {
-    viewport.setFlipVertical(true);
-  }
-  
-  if (gsps.presentationPixelMagnificationRatio) {
-    viewport.setZoom(gsps.presentationPixelMagnificationRatio);
-  }
-  
-  // Apply presentation LUT
-  if (gsps.softcopyPresentationLUTSequence && gsps.softcopyPresentationLUTSequence.length > 0) {
-    const presLUT = gsps.softcopyPresentationLUTSequence[0];
-    if (presLUT.presentationLUTShape) {
-      // Apply presentation LUT shape (IDENTITY, INVERSE, etc.)
-      viewport.setPresentationLUT(presLUT.presentationLUTShape);
-    }
-  }
-};

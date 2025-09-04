@@ -232,7 +232,7 @@ const MemoryManager: React.FC = () => {
           return (isOld && isLowPriority) || isUnderUtilized || isHighlyFragmented;
         });
         
-        const freedMemory = blocksToCollect.reduce((sum: number, block: any) => sum + block.size, 0);
+        const freedMemory = blocksToCollect.reduce((sum: number, block: MemoryBlock) => sum + block.size, 0);
         totalFreed += freedMemory;
         blocksCollected += blocksToCollect.length;
         
@@ -356,7 +356,7 @@ const MemoryManager: React.FC = () => {
     if (settings.enableAutoGC && usagePercentage >= settings.gcThreshold) {
       runGarbageCollection();
     }
-  }, [pools, memoryPressure, settings, runGarbageCollection, addAlert]);
+  }, [pools, memoryPressure, settings, runGarbageCollection]);
 
   // Alert management
   const addAlert = useCallback((alert: MemoryAlert) => {

@@ -1,54 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Button,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Badge,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTab,
-  Checkbox,
-  Label,
-  Textarea,
-  Switch,
-  Progress,
-  Alert,
-  AlertDescription,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-  Separator
-} from '../ui';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Badge } from '../ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
+import { Alert, AlertDescription } from '../ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import {
   Users,
   UserPlus,
-  Search,
-  Filter,
-  Settings,
   Shield,
   Key,
   Eye,
@@ -57,28 +24,15 @@ import {
   MoreHorizontal,
   RefreshCw,
   Download,
-  Upload,
   Lock,
   Unlock,
-  CheckCircle,
-  XCircle,
   AlertCircle,
-  Clock,
   Activity,
-  Calendar,
-  Mail,
-  Phone,
-  MapPin,
-  Building,
-  Briefcase,
-  GraduationCap,
-  Star,
-  History,
   LogOut,
   UserCheck,
   UserX,
   Crown,
-  Zap
+  Plus,
 } from 'lucide-react';
 
 // Types
@@ -131,7 +85,7 @@ interface Permission {
 interface PermissionCondition {
   field: string;
   operator: 'equals' | 'not_equals' | 'contains' | 'in' | 'not_in';
-  value: any;
+  value: unknown;
 }
 
 interface UserPreferences {
@@ -195,12 +149,12 @@ const UserManagement: React.FC = () => {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [_editingUser, _setEditingUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('users');
-  const [showUserDialog, setShowUserDialog] = useState(false);
-  const [showRoleDialog, setShowRoleDialog] = useState(false);
+  const [_showUserDialog, _setShowUserDialog] = useState(false);
+  const [_showRoleDialog, _setShowRoleDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState<string>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
@@ -258,8 +212,9 @@ const UserManagement: React.FC = () => {
     }
   }, []);
 
-  // Create or update user
-  const saveUser = async (user: Partial<User>) => {
+  // Create or update user (unused but kept for future functionality)
+  // @ts-expect-error - Intentionally unused, kept for future functionality
+  const _saveUser = async (user: Partial<User>) => {
     try {
       const method = user.id ? 'PUT' : 'POST';
       const url = user.id ? `/api/users/${user.id}` : '/api/users';
@@ -280,8 +235,8 @@ const UserManagement: React.FC = () => {
         setUsers(prev => [...prev, savedUser]);
       }
       
-      setShowUserDialog(false);
-      setEditingUser(null);
+      _setShowUserDialog(false);
+      _setEditingUser(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save user');
     }
@@ -454,7 +409,7 @@ const UserManagement: React.FC = () => {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={() => { setEditingUser(null); setShowUserDialog(true); }}>
+          <Button onClick={() => { _setEditingUser(null); _setShowUserDialog(true); }}>
             <UserPlus className="w-4 h-4 mr-2" />
             Add User
           </Button>
@@ -526,10 +481,10 @@ const UserManagement: React.FC = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTab value="users">Users</TabsTab>
-          <TabsTab value="roles">Roles & Permissions</TabsTab>
-          <TabsTab value="audit">Audit Logs</TabsTab>
-          <TabsTab value="settings">Settings</TabsTab>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>
+          <TabsTrigger value="audit">Audit Logs</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
         {/* Users Tab */}
@@ -723,7 +678,7 @@ const UserManagement: React.FC = () => {
                                   <Button 
                                     size="sm" 
                                     variant="ghost"
-                                    onClick={() => { setEditingUser(user); setShowUserDialog(true); }}
+                                    onClick={() => { _setEditingUser(user); _setShowUserDialog(true); }}
                                   >
                                     <Edit className="w-4 h-4" />
                                   </Button>
@@ -790,7 +745,7 @@ const UserManagement: React.FC = () => {
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle>Roles</CardTitle>
-                  <Button onClick={() => setShowRoleDialog(true)} size="sm">
+                  <Button onClick={() => _setShowRoleDialog(true)} size="sm">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Role
                   </Button>

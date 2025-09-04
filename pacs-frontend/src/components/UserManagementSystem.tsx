@@ -44,7 +44,7 @@ export interface Permission {
 export interface PermissionCondition {
   field: string;
   operator: 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'in' | 'not_in';
-  value: any;
+  value: unknown;
 }
 
 export interface UserPreferences {
@@ -97,7 +97,7 @@ export interface AuditLogEntry {
   action: string;
   resource: string;
   resourceId?: string;
-  details: { [key: string]: any };
+  details: Record<string, unknown>;
   ipAddress: string;
   userAgent: string;
   timestamp: Date;
@@ -140,7 +140,7 @@ export interface SSOProvider {
   name: string;
   type: 'saml' | 'oauth2' | 'oidc';
   isEnabled: boolean;
-  config: { [key: string]: any };
+  config: Record<string, unknown>;
 }
 
 export interface LDAPConfig {
@@ -209,8 +209,8 @@ export class UserManagementSystem extends EventEmitter {
   private currentUser: User | null = null;
   private currentSession: UserSession | null = null;
   private isInitialized = false;
-  private sessionCheckInterval: any;
-  private auditCleanupInterval: any;
+  private sessionCheckInterval: NodeJS.Timeout | null = null;
+  private auditCleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<AuthenticationConfig> = {}) {
     super();
@@ -282,11 +282,11 @@ export class UserManagementSystem extends EventEmitter {
       const savedUsers = localStorage.getItem('dicom_users');
       if (savedUsers) {
         const users = JSON.parse(savedUsers);
-        users.forEach((user: any) => {
-          user.createdAt = new Date(user.createdAt);
-          user.updatedAt = new Date(user.updatedAt);
-          user.lastLogin = user.lastLogin ? new Date(user.lastLogin) : undefined;
-          this.users.set(user.id, user);
+        users.forEach((user: Record<string, unknown>) => {
+          user.createdAt = new Date(user.createdAt as string);
+          user.updatedAt = new Date(user.updatedAt as string);
+          user.lastLogin = user.lastLogin ? new Date(user.lastLogin as string) : undefined;
+          this.users.set(user.id as string, user as unknown as User);
         });
       }
 
@@ -294,10 +294,10 @@ export class UserManagementSystem extends EventEmitter {
       const savedRoles = localStorage.getItem('dicom_roles');
       if (savedRoles) {
         const roles = JSON.parse(savedRoles);
-        roles.forEach((role: any) => {
-          role.createdAt = new Date(role.createdAt);
-          role.updatedAt = new Date(role.updatedAt);
-          this.roles.set(role.id, role);
+        roles.forEach((role: Record<string, unknown>) => {
+          role.createdAt = new Date(role.createdAt as string);
+          role.updatedAt = new Date(role.updatedAt as string);
+          this.roles.set(role.id as string, role as unknown as UserRole);
         });
       }
 
@@ -305,9 +305,9 @@ export class UserManagementSystem extends EventEmitter {
       const savedAuditLog = localStorage.getItem('dicom_audit_log');
       if (savedAuditLog) {
         const auditEntries = JSON.parse(savedAuditLog);
-        this.auditLog = auditEntries.map((entry: any) => ({
+        this.auditLog = auditEntries.map((entry: Record<string, unknown>) => ({
           ...entry,
-          timestamp: new Date(entry.timestamp)
+          timestamp: new Date(entry.timestamp as string)
         }));
       }
     } catch (error) {
@@ -1046,7 +1046,7 @@ export class UserManagementSystem extends EventEmitter {
     action: string,
     resource: string,
     resourceId?: string,
-    details: { [key: string]: any } = {},
+    details: Record<string, unknown> = {},
     success: boolean = true,
     errorMessage?: string
   ): void {

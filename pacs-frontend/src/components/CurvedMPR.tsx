@@ -1,21 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { 
-  RotateCcw, 
   Move3D, 
-  Layers, 
-  Settings, 
   Download, 
-  RefreshCw,
-  Maximize,
-  Grid3X3,
   Eye,
   EyeOff
 } from 'lucide-react';
@@ -49,11 +41,11 @@ interface MPRPlane {
 }
 
 interface CurvedMPRProps {
-  volumeData?: any;
+  volumeData?: Record<string, unknown>;
   imageStack?: string[];
   onPathCreated?: (path: CurvedPath) => void;
   onPlaneUpdated?: (plane: MPRPlane) => void;
-  onImageExport?: (imageData: ImageData, filename: string) => void;
+  _onImageExport?: (imageData: ImageData, filename: string) => void;
 }
 
 export const CurvedMPR: React.FC<CurvedMPRProps> = ({
@@ -61,7 +53,7 @@ export const CurvedMPR: React.FC<CurvedMPRProps> = ({
   imageStack,
   onPathCreated,
   onPlaneUpdated,
-  onImageExport
+  _onImageExport: _
 }) => {
   const { theme } = useTheme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -98,8 +90,8 @@ export const CurvedMPR: React.FC<CurvedMPRProps> = ({
       windowWidth: 400
     }
   ]);
-  const [selectedPath, setSelectedPath] = useState<CurvedPath | null>(null);
-  const [selectedPlane, setSelectedPlane] = useState<MPRPlane | null>(null);
+  const [_selectedPath, setSelectedPath] = useState<CurvedPath | null>(null);
+  const [, ] = useState<MPRPlane | null>(null);
   const [isDrawingPath, setIsDrawingPath] = useState(false);
   const [currentPath, setCurrentPath] = useState<Point3D[]>([]);
   const [mprSettings, setMprSettings] = useState({
@@ -215,21 +207,20 @@ export const CurvedMPR: React.FC<CurvedMPRProps> = ({
       const x = (i / 4) % width;
       const y = Math.floor((i / 4) / width);
       
-      let intensity = 0;
-      switch (plane.orientation) {
-        case 'axial':
-          intensity = Math.sin(x * 0.1) * Math.cos(y * 0.1) * 127 + 128;
-          break;
-        case 'sagittal':
-          intensity = Math.sin(x * 0.05) * Math.sin(y * 0.05) * 127 + 128;
-          break;
-        case 'coronal':
-          intensity = Math.cos(x * 0.08) * Math.cos(y * 0.08) * 127 + 128;
-          break;
-        case 'curved':
-          intensity = Math.sin(x * 0.02) * Math.cos(y * 0.02) * 127 + 128;
-          break;
-      }
+      let intensity = (() => {
+        switch (plane.orientation) {
+          case 'axial':
+            return Math.sin(x * 0.1) * Math.cos(y * 0.1) * 127 + 128;
+          case 'sagittal':
+            return Math.sin(x * 0.05) * Math.sin(y * 0.05) * 127 + 128;
+          case 'coronal':
+            return Math.cos(x * 0.08) * Math.cos(y * 0.08) * 127 + 128;
+          case 'curved':
+            return Math.sin(x * 0.02) * Math.cos(y * 0.02) * 127 + 128;
+          default:
+            return 0;
+        }
+      })();
       
       // Apply window/level
       const windowMin = plane.windowLevel - plane.windowWidth / 2;

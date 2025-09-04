@@ -20,14 +20,11 @@ import {
   Button,
   ButtonGroup,
   Chip,
-  Alert,
   LinearProgress,
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  TextField,
   IconButton,
-  Tooltip,
   Paper,
   Table,
   TableBody,
@@ -39,39 +36,19 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Divider,
-  Badge
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
   Refresh as RefreshIcon,
-  Save as SaveIcon,
   Download as DownloadIcon,
-  Upload as UploadIcon,
   Settings as SettingsIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-  PlayArrow as PlayIcon,
-  Pause as PauseIcon,
-  Stop as StopIcon,
   ZoomIn as ZoomInIcon,
   ZoomOut as ZoomOutIcon,
-  Tune as TuneIcon,
-  Assessment as AssessmentIcon,
-  Timeline as TimelineIcon,
-  ScatterPlot as ScatterPlotIcon,
-  ShowChart as ChartIcon,
-  Functions as FunctionIcon,
-  Science as ScienceIcon,
-  Analytics as AnalyticsIcon,
-  FilterAlt as FilterIcon,
-  AutoFixHigh as AutoIcon,
   Calculate as CalculateIcon,
-  Biotech as BiotechIcon
+  Timeline as TimelineIcon,
+  Functions as FunctionIcon
 } from '@mui/icons-material';
 
 // MRS Data Structures
@@ -222,26 +199,10 @@ interface QualityMetrics {
   overallQuality: 'excellent' | 'good' | 'acceptable' | 'poor';
 }
 
-interface FittingModel {
-  name: string;
-  metabolites: string[];
-  priorKnowledge: {
-    frequencies: { [key: string]: number };
-    linewidths: { [key: string]: number };
-    phases: { [key: string]: number };
-    amplitudes: { [key: string]: number };
-  };
-  constraints: {
-    frequencyRange: [number, number];
-    amplitudeRange: [number, number];
-    linewidthRange: [number, number];
-  };
-}
 
 const MRSpectroscopy: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [study, setStudy] = useState<MRSStudy | null>(null);
-  const [selectedVoxel, setSelectedVoxel] = useState<string | null>(null);
   const [selectedSpectrum, setSelectedSpectrum] = useState<string | null>(null);
   const [processingParams, setProcessingParams] = useState<ProcessingParameters>({
     apodization: { type: 'exponential', linebroadening: 3.0 },
@@ -255,14 +216,9 @@ const MRSpectroscopy: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
-  const [viewMode, setViewMode] = useState<'spectrum' | 'metabolites' | 'fitting' | 'quality'>('spectrum');
   const [frequencyRange, setFrequencyRange] = useState<[number, number]>([0.5, 4.5]);
-  const [amplitudeRange, setAmplitudeRange] = useState<[number, number]>([0, 100]);
   const [showBaseline, setShowBaseline] = useState(true);
   const [showFitting, setShowFitting] = useState(true);
-  const [showResidual, setShowResidual] = useState(false);
-  
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const spectrumCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Initialize with sample data
@@ -473,7 +429,6 @@ const MRSpectroscopy: React.FC = () => {
     };
     
     setStudy(sampleStudy);
-    setSelectedVoxel('voxel_001');
     setSelectedSpectrum('spectrum_001');
   }, []);
 
@@ -993,7 +948,7 @@ const MRSpectroscopy: React.FC = () => {
             <Typography variant="subtitle2" gutterBottom>Metabolite Ratios</Typography>
             <Grid container spacing={2}>
               {Object.entries(study.quantification.metaboliteRatios).map(([ratio, value]) => (
-                <Grid item xs={6} md={4} key={ratio}>
+                <Grid size={{ xs: 6, md: 4 }} key={ratio}>
                   <Paper sx={{ p: 2, textAlign: 'center' }}>
                     <Typography variant="h6">{value.toFixed(2)}</Typography>
                     <Typography variant="caption">{ratio}</Typography>
@@ -1014,7 +969,7 @@ const MRSpectroscopy: React.FC = () => {
         
         {study && (
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Signal-to-Noise Ratio</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <LinearProgress
@@ -1027,7 +982,7 @@ const MRSpectroscopy: React.FC = () => {
               </Box>
             </Grid>
             
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Linewidth (Hz)</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <LinearProgress
@@ -1040,7 +995,7 @@ const MRSpectroscopy: React.FC = () => {
               </Box>
             </Grid>
             
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Water Suppression (dB)</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <LinearProgress
@@ -1053,7 +1008,7 @@ const MRSpectroscopy: React.FC = () => {
               </Box>
             </Grid>
             
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Shim Quality</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 <LinearProgress
@@ -1066,11 +1021,11 @@ const MRSpectroscopy: React.FC = () => {
               </Box>
             </Grid>
             
-            <Grid item xs={12}>
+            <Grid size={{ xs: 12 }}>
               <Box sx={{ textAlign: 'center', mt: 2 }}>
                 <Chip
                   label={`Overall Quality: ${study.quality.overallQuality.toUpperCase()}`}
-                  size="large"
+                  size="medium"
                   color={
                     study.quality.overallQuality === 'excellent' ? 'success' :
                     study.quality.overallQuality === 'good' ? 'info' :
@@ -1109,11 +1064,11 @@ const MRSpectroscopy: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           {renderSpectrumViewer()}
         </Grid>
         
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value)}>
             <Tab label="Processing" />
             <Tab label="Metabolites" />

@@ -102,21 +102,6 @@ const PerformanceOptimizer: React.FC = () => {
   const metricsInterval = useRef<NodeJS.Timeout | null>(null);
 
   // Performance monitoring
-  const startMonitoring = useCallback(() => {
-    setIsMonitoring(true);
-    metricsInterval.current = setInterval(() => {
-      updatePerformanceMetrics();
-    }, 1000);
-  }, [updatePerformanceMetrics]);
-
-  const stopMonitoring = useCallback(() => {
-    setIsMonitoring(false);
-    if (metricsInterval.current) {
-      clearInterval(metricsInterval.current);
-      metricsInterval.current = null;
-    }
-  }, []);
-
   const updatePerformanceMetrics = useCallback(() => {
     // Simulate performance metrics collection
     const newMetrics: PerformanceMetrics = {
@@ -138,6 +123,21 @@ const PerformanceOptimizer: React.FC = () => {
       (newMetrics.memoryUsage.used / newMetrics.memoryUsage.total) * 100;
 
     setMetrics(newMetrics);
+  }, []);
+
+  const startMonitoring = useCallback(() => {
+    setIsMonitoring(true);
+    metricsInterval.current = setInterval(() => {
+      updatePerformanceMetrics();
+    }, 1000);
+  }, [updatePerformanceMetrics]);
+
+  const stopMonitoring = useCallback(() => {
+    setIsMonitoring(false);
+    if (metricsInterval.current) {
+      clearInterval(metricsInterval.current);
+      metricsInterval.current = null;
+    }
   }, []);
 
   // Memory management

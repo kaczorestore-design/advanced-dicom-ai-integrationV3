@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import * as dicomParser from 'dicom-parser';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { Slider } from './ui/slider';
 import { Switch } from './ui/switch';
-import { Monitor, Upload, Eye, Settings, Palette, Layers, Image, RotateCw, ZoomIn, Contrast } from 'lucide-react';
+import { Monitor, Upload, Eye, Layers, Image, RotateCw, Contrast } from 'lucide-react';
 
 interface PresentationState {
   sopInstanceUID: string;
@@ -247,31 +247,31 @@ export default function DICOMPRParser({
           const contentCreatorName = dataSet.string('x00700084');
 
           // Extract referenced image sequence
-          const referencedImageSequence = extractReferencedImageSequence(dataSet);
+          const referencedImageSequence = extractReferencedImageSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract displayed area selection sequence
-          const displayedAreaSelectionSequence = extractDisplayedAreaSelectionSequence(dataSet);
+          const displayedAreaSelectionSequence = extractDisplayedAreaSelectionSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract graphic annotation sequence
-          const graphicAnnotationSequence = extractGraphicAnnotationSequence(dataSet);
+          const graphicAnnotationSequence = extractGraphicAnnotationSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract text object sequence
-          const textObjectSequence = extractTextObjectSequence(dataSet);
+          const textObjectSequence = extractTextObjectSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract graphic layer sequence
-          const graphicLayerSequence = extractGraphicLayerSequence(dataSet);
+          const graphicLayerSequence = extractGraphicLayerSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract LUT sequences
-          const modalityLUTSequence = extractModalityLUTSequence(dataSet);
-          const voiLUTSequence = extractVOILUTSequence(dataSet);
-          const presentationLUTSequence = extractPresentationLUTSequence(dataSet);
+          const modalityLUTSequence = extractModalityLUTSequence(dataSet as unknown as Record<string, unknown>);
+          const voiLUTSequence = extractVOILUTSequence(dataSet as unknown as Record<string, unknown>);
+          const presentationLUTSequence = extractPresentationLUTSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract overlay plane sequence
-          const overlayPlaneSequence = extractOverlayPlaneSequence(dataSet);
+          const overlayPlaneSequence = extractOverlayPlaneSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract display shutter sequence
-          const displayShutterSequence = extractDisplayShutterSequence(dataSet);
-          const bitmapDisplayShutterSequence = extractBitmapDisplayShutterSequence(dataSet);
+          const displayShutterSequence = extractDisplayShutterSequence(dataSet as unknown as Record<string, unknown>);
+          const bitmapDisplayShutterSequence = extractBitmapDisplayShutterSequence(dataSet as unknown as Record<string, unknown>);
 
           // Extract shutter information
           const shutterPresentationValue = dataSet.uint16('x00181612');
@@ -299,7 +299,7 @@ export default function DICOMPRParser({
 
           const presentationState: PresentationState = {
             sopInstanceUID,
-            sopClassUID,
+            sopClassUID: sopClassUID || '',
             studyInstanceUID,
             seriesInstanceUID,
             instanceNumber,
@@ -348,12 +348,12 @@ export default function DICOMPRParser({
   }, []);
 
   // Extract referenced image sequence
-  const extractReferencedImageSequence = (dataSet: any): ReferencedImage[] => {
-    const sequence = dataSet.elements.x00081140;
-    if (!sequence || !sequence.items) return [];
+  const extractReferencedImageSequence = (dataSet: Record<string, unknown>): ReferencedImage[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00081140;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const referencedSOPClassUID = itemDataSet.string('x00081150') || '';
       const referencedSOPInstanceUID = itemDataSet.string('x00081155') || '';
       
@@ -379,12 +379,12 @@ export default function DICOMPRParser({
   };
 
   // Extract displayed area selection sequence
-  const extractDisplayedAreaSelectionSequence = (dataSet: any): DisplayedAreaSelection[] => {
-    const sequence = dataSet.elements.x00700130;
-    if (!sequence || !sequence.items) return [];
+  const extractDisplayedAreaSelectionSequence = (dataSet: Record<string, unknown>): DisplayedAreaSelection[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700130;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string; floatString(tag: string): number };
       const referencedImageSequence = extractReferencedImageSequence(itemDataSet);
       const displayedAreaTopLeftHandCorner = extractIntArray(itemDataSet, 'x00700052') || [];
       const displayedAreaBottomRightHandCorner = extractIntArray(itemDataSet, 'x00700053') || [];
@@ -406,12 +406,12 @@ export default function DICOMPRParser({
   };
 
   // Extract graphic annotation sequence
-  const extractGraphicAnnotationSequence = (dataSet: any): GraphicAnnotation[] => {
-    const sequence = dataSet.elements.x00700001;
-    if (!sequence || !sequence.items) return [];
+  const extractGraphicAnnotationSequence = (dataSet: Record<string, unknown>): GraphicAnnotation[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700001;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const graphicLayer = itemDataSet.string('x00700002');
       const textObjectSequence = extractTextObjectSequence(itemDataSet);
       const graphicObjectSequence = extractGraphicObjectSequence(itemDataSet);
@@ -427,12 +427,12 @@ export default function DICOMPRParser({
   };
 
   // Extract graphic object sequence
-  const extractGraphicObjectSequence = (dataSet: any): GraphicObject[] => {
-    const sequence = dataSet.elements.x00700009;
-    if (!sequence || !sequence.items) return [];
+  const extractGraphicObjectSequence = (dataSet: Record<string, unknown>): GraphicObject[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700009;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string; uint16(tag: string): number };
       const graphicAnnotationUnits = itemDataSet.string('x00700005') || '';
       const graphicDimensions = itemDataSet.uint16('x00700020') || 2;
       const numberOfGraphicPoints = itemDataSet.uint16('x00700021') || 0;
@@ -452,12 +452,12 @@ export default function DICOMPRParser({
   };
 
   // Extract text object sequence
-  const extractTextObjectSequence = (dataSet: any): TextObject[] => {
-    const sequence = dataSet.elements.x00700008;
-    if (!sequence || !sequence.items) return [];
+  const extractTextObjectSequence = (dataSet: Record<string, unknown>): TextObject[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700008;
+    if (!sequence || !(sequence as Record<string, unknown>).items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return ((sequence as Record<string, unknown>).items as Record<string, unknown>[]).map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const boundingBoxAnnotationUnits = itemDataSet.string('x00700003');
       const anchorPointAnnotationUnits = itemDataSet.string('x00700004');
       const unformattedTextValue = itemDataSet.string('x00700006') || '';
@@ -479,12 +479,16 @@ export default function DICOMPRParser({
   };
 
   // Extract graphic layer sequence
-  const extractGraphicLayerSequence = (dataSet: any): GraphicLayer[] => {
-    const sequence = dataSet.elements.x00700060;
+  const extractGraphicLayerSequence = (dataSet: Record<string, unknown>): GraphicLayer[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00700060 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemWithDataSet = item as Record<string, unknown> & { dataSet: Record<string, unknown> };
+      const itemDataSet = itemWithDataSet.dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+        uint16(tag: string): number; 
+      };
       const graphicLayer = itemDataSet.string('x00700002') || '';
       const graphicLayerOrder = itemDataSet.uint16('x00700062') || 0;
       const graphicLayerRecommendedDisplayGrayscaleValue = itemDataSet.uint16('x00700066');
@@ -502,12 +506,15 @@ export default function DICOMPRParser({
   };
 
   // Extract modality LUT sequence
-  const extractModalityLUTSequence = (dataSet: any): ModalityLUT[] => {
-    const sequence = dataSet.elements.x00283000;
+  const extractModalityLUTSequence = (dataSet: Record<string, unknown>): ModalityLUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00283000 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemWithDataSet = item as Record<string, unknown> & { dataSet: Record<string, unknown> };
+      const itemDataSet = itemWithDataSet.dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+      };
       const lutDescriptor = extractIntArray(itemDataSet, 'x00283002') || [];
       const lutExplanation = itemDataSet.string('x00283003');
       const modalityLUTType = itemDataSet.string('x00283004') || '';
@@ -523,12 +530,15 @@ export default function DICOMPRParser({
   };
 
   // Extract VOI LUT sequence
-  const extractVOILUTSequence = (dataSet: any): VOILUT[] => {
-    const sequence = dataSet.elements.x00283010;
+  const extractVOILUTSequence = (dataSet: Record<string, unknown>): VOILUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00283010 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemWithDataSet = item as Record<string, unknown> & { dataSet: Record<string, unknown> };
+      const itemDataSet = itemWithDataSet.dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+      };
       const lutDescriptor = extractIntArray(itemDataSet, 'x00283002') || [];
       const lutExplanation = itemDataSet.string('x00283003');
       const lutData = extractIntArray(itemDataSet, 'x00283006') || [];
@@ -542,12 +552,15 @@ export default function DICOMPRParser({
   };
 
   // Extract presentation LUT sequence
-  const extractPresentationLUTSequence = (dataSet: any): PresentationLUT[] => {
-    const sequence = dataSet.elements.x20500010;
+  const extractPresentationLUTSequence = (dataSet: Record<string, unknown>): PresentationLUT[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x20500010 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemWithDataSet = item as Record<string, unknown> & { dataSet: Record<string, unknown> };
+      const itemDataSet = itemWithDataSet.dataSet as Record<string, unknown> & { 
+        string(tag: string): string; 
+      };
       const lutDescriptor = extractIntArray(itemDataSet, 'x00283002') || [];
       const lutExplanation = itemDataSet.string('x00283003');
       const presentationLUTShape = itemDataSet.string('x20500020');
@@ -563,8 +576,16 @@ export default function DICOMPRParser({
   };
 
   // Extract overlay plane sequence
-  const extractOverlayPlaneSequence = (dataSet: any): OverlayPlane[] => {
+  const extractOverlayPlaneSequence = (dataSet: Record<string, unknown>): OverlayPlane[] => {
     const overlays: OverlayPlane[] = [];
+    const typedDataSet = dataSet as Record<string, unknown> & {
+      elements: Record<string, unknown>;
+      uint16(tag: string): number;
+      uint32(tag: string): number;
+      string(tag: string): string;
+      floatString(tag: string): string;
+      byteArray: { buffer: ArrayBuffer };
+    };
     
     // Check for overlay groups (6000-60FF)
     for (let group = 0x6000; group <= 0x60FF; group += 2) {
@@ -577,23 +598,24 @@ export default function DICOMPRParser({
       const overlayBitPositionTag = `x${groupHex}0102`;
       const overlayDataTag = `x${groupHex}3000`;
       
-      if (dataSet.elements[overlayRowsTag]) {
-        const overlayRows = dataSet.uint16(overlayRowsTag) || 0;
-        const overlayColumns = dataSet.uint16(overlayColumnsTag) || 0;
-        const overlayType = dataSet.string(overlayTypeTag) || '';
-        const overlayOrigin = extractIntArray(dataSet, overlayOriginTag) || [];
-        const overlayBitsAllocated = dataSet.uint16(overlayBitsAllocatedTag) || 1;
-        const overlayBitPosition = dataSet.uint16(overlayBitPositionTag) || 0;
-        const overlayData = dataSet.elements[overlayDataTag]?.dataOffset 
-          ? new Uint8Array(dataSet.byteArray.buffer, dataSet.elements[overlayDataTag].dataOffset, dataSet.elements[overlayDataTag].length)
+      if (typedDataSet.elements[overlayRowsTag]) {
+        const overlayRows = typedDataSet.uint16(overlayRowsTag) || 0;
+        const overlayColumns = typedDataSet.uint16(overlayColumnsTag) || 0;
+        const overlayType = typedDataSet.string(overlayTypeTag) || '';
+        const overlayOrigin = extractIntArray(typedDataSet, overlayOriginTag) || [];
+        const overlayBitsAllocated = typedDataSet.uint16(overlayBitsAllocatedTag) || 1;
+        const overlayBitPosition = typedDataSet.uint16(overlayBitPositionTag) || 0;
+        const overlayDataElement = (typedDataSet.elements[overlayDataTag] as Record<string, unknown> & { dataOffset?: number; length?: number });
+        const overlayData = overlayDataElement?.dataOffset 
+          ? new Uint8Array(typedDataSet.byteArray.buffer, overlayDataElement.dataOffset, overlayDataElement.length)
           : new Uint8Array();
         
-        const overlayDescription = dataSet.string(`x${groupHex}0022`);
-        const overlaySubtype = dataSet.string(`x${groupHex}0045`);
-        const overlayLabel = dataSet.string(`x${groupHex}1500`);
-        const roiArea = dataSet.uint32(`x${groupHex}1301`);
-        const roiMean = dataSet.floatString(`x${groupHex}1302`);
-        const roiStandardDeviation = dataSet.floatString(`x${groupHex}1303`);
+        const overlayDescription = typedDataSet.string(`x${groupHex}0022`);
+        const overlaySubtype = typedDataSet.string(`x${groupHex}0045`);
+        const overlayLabel = typedDataSet.string(`x${groupHex}1500`);
+        const roiArea = typedDataSet.uint32(`x${groupHex}1301`);
+        const roiMean = parseFloat(typedDataSet.floatString(`x${groupHex}1302`) || '0');
+        const roiStandardDeviation = parseFloat(typedDataSet.floatString(`x${groupHex}1303`) || '0');
 
         overlays.push({
           overlayRows,
@@ -617,25 +639,29 @@ export default function DICOMPRParser({
   };
 
   // Extract display shutter sequence
-  const extractDisplayShutterSequence = (dataSet: any): DisplayShutter[] => {
+  const extractDisplayShutterSequence = (dataSet: Record<string, unknown>): DisplayShutter[] => {
     const shutters: DisplayShutter[] = [];
+    const typedDataSet = dataSet as Record<string, unknown> & {
+      string(tag: string): string;
+      uint16(tag: string): number;
+    };
     
-    const shutterShape = dataSet.string('x00181600');
+    const shutterShape = typedDataSet.string('x00181600');
     if (shutterShape) {
       const shutter: DisplayShutter = {
         shutterShape
       };
       
       if (shutterShape === 'RECTANGULAR') {
-        shutter.shutterLeftVerticalEdge = dataSet.uint16('x00181602');
-        shutter.shutterRightVerticalEdge = dataSet.uint16('x00181604');
-        shutter.shutterUpperHorizontalEdge = dataSet.uint16('x00181606');
-        shutter.shutterLowerHorizontalEdge = dataSet.uint16('x00181608');
+        shutter.shutterLeftVerticalEdge = typedDataSet.uint16('x00181602');
+        shutter.shutterRightVerticalEdge = typedDataSet.uint16('x00181604');
+        shutter.shutterUpperHorizontalEdge = typedDataSet.uint16('x00181606');
+        shutter.shutterLowerHorizontalEdge = typedDataSet.uint16('x00181608');
       } else if (shutterShape === 'CIRCULAR') {
-        shutter.centerOfCircularShutter = extractIntArray(dataSet, 'x0018160a');
-        shutter.radiusOfCircularShutter = dataSet.uint16('x0018160c');
+        shutter.centerOfCircularShutter = extractIntArray(typedDataSet, 'x0018160a');
+        shutter.radiusOfCircularShutter = typedDataSet.uint16('x0018160c');
       } else if (shutterShape === 'POLYGONAL') {
-        shutter.verticesOfThePolygonalShutter = extractIntArray(dataSet, 'x0018160e');
+        shutter.verticesOfThePolygonalShutter = extractIntArray(typedDataSet, 'x0018160e');
       }
       
       shutters.push(shutter);
@@ -645,12 +671,15 @@ export default function DICOMPRParser({
   };
 
   // Extract bitmap display shutter sequence
-  const extractBitmapDisplayShutterSequence = (dataSet: any): BitmapDisplayShutter[] => {
-    const sequence = dataSet.elements.x00181616;
+  const extractBitmapDisplayShutterSequence = (dataSet: Record<string, unknown>): BitmapDisplayShutter[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00181616 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemWithDataSet = item as Record<string, unknown> & { dataSet: Record<string, unknown> };
+      const itemDataSet = itemWithDataSet.dataSet as Record<string, unknown> & { 
+        uint16(tag: string): number; 
+      };
       const shutterOverlayGroup = itemDataSet.uint16('x00181614') || 0;
       const shutterPresentationValue = itemDataSet.uint16('x00181612') || 0;
 
@@ -662,19 +691,19 @@ export default function DICOMPRParser({
   };
 
   // Utility functions
-  const extractIntArray = (dataSet: any, tag: string): number[] | undefined => {
-    const element = dataSet.elements[tag];
+  const extractIntArray = (dataSet: unknown, tag: string): number[] | undefined => {
+    const element = (dataSet as Record<string, unknown> & { elements: Record<string, unknown> }).elements[tag] as { length: number } | undefined;
     if (!element) return undefined;
     
     const values: number[] = [];
     for (let i = 0; i < element.length; i += 2) {
-      values.push(dataSet.uint16(tag, i / 2));
+      values.push((dataSet as Record<string, unknown> & { uint16(tag: string, index?: number): number }).uint16(tag, i / 2));
     }
     return values;
   };
 
-  const extractFloatArray = (dataSet: any, tag: string): number[] | undefined => {
-    const stringValue = dataSet.string(tag);
+  const extractFloatArray = (dataSet: unknown, tag: string): number[] | undefined => {
+    const stringValue = (dataSet as Record<string, unknown> & { string(tag: string): string }).string(tag);
     if (!stringValue) return undefined;
     
     return stringValue.split('\\').map(Number);
@@ -1246,8 +1275,8 @@ export const DICOMPRUtils = {
   },
   
   hasDisplayShutter: (presentationState: PresentationState): boolean => {
-    return (presentationState.displayShutterSequence && presentationState.displayShutterSequence.length > 0) ||
-           (presentationState.bitmapDisplayShutterSequence && presentationState.bitmapDisplayShutterSequence.length > 0);
+    return !!(presentationState.displayShutterSequence && presentationState.displayShutterSequence.length > 0) ||
+           !!(presentationState.bitmapDisplayShutterSequence && presentationState.bitmapDisplayShutterSequence.length > 0);
   },
   
   getStatistics: (presentationState: PresentationState) => {

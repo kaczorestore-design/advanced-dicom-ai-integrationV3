@@ -358,7 +358,7 @@ window.AIAnalysisPlugin = AIAnalysisPlugin;`
   };
 
   const loadTemplate = (template: PluginTemplate) => {
-    _setSelectedTemplate(template);
+    // _setSelectedTemplate(template); // Commented out - variable not declared
     const mainFile = template.files.find(f => f.path === 'index.js');
     if (mainFile) {
       setPluginCode(mainFile.content);

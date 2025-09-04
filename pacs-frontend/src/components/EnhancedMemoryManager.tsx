@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+// import React from 'react';
 import { EventEmitter } from 'events';
 import PerformanceOptimizer from './PerformanceOptimizer';
 import EnhancedDICOMNetwork from './EnhancedDICOMNetwork';
@@ -14,7 +14,7 @@ export interface MemorySegment {
   compressionRatio?: number;
   persistent: boolean;
   owner: string;
-  data?: any;
+  data?: unknown;
   references: number;
 }
 
@@ -93,13 +93,13 @@ export class EnhancedMemoryManager extends EventEmitter {
   private config: EnhancedMemoryManagerConfig;
   private memoryPools: Map<string, MemoryPool> = new Map();
   private activeSegments: Map<string, MemorySegment> = new Map();
-  private streamingJobs: Map<string, any> = new Map();
+  private streamingJobs: Map<string, Record<string, unknown>> = new Map();
   private compressionWorkers: Worker[] = [];
   private metrics: MemoryOptimizationMetrics[] = [];
-  private metricsInterval: any;
-  private gcInterval: any;
-  private performanceOptimizer?: PerformanceOptimizer;
-  private networkManager?: EnhancedDICOMNetwork;
+  private metricsInterval: NodeJS.Timeout | null = null;
+  private gcInterval: NodeJS.Timeout | null = null;
+  // private _performanceOptimizer?: PerformanceOptimizer;
+  // private _networkManager?: EnhancedDICOMNetwork;
   private isInitialized = false;
 
   constructor(config: Partial<EnhancedMemoryManagerConfig> = {}) {
@@ -450,15 +450,16 @@ export class EnhancedMemoryManager extends EventEmitter {
     }
   }
 
-  private async processStreamingJob(job: any): Promise<void> {
+  private async processStreamingJob(job: Record<string, unknown>): Promise<void> {
     try {
       job.status = 'streaming';
       
       // Process chunks in parallel with controlled concurrency
-      const concurrentChunks = Math.min(job.strategy.maxConcurrentChunks, job.totalChunks);
+      const jobWithStrategy = job as Record<string, unknown> & { strategy: { maxConcurrentChunks: number }; totalChunks: number };
+      const concurrentChunks = Math.min(jobWithStrategy.strategy.maxConcurrentChunks, jobWithStrategy.totalChunks);
       const chunkPromises: Promise<void>[] = [];
       
-      for (let i = 0; i < concurrentChunks && i < job.totalChunks; i++) {
+      for (let i = 0; i < concurrentChunks && i < jobWithStrategy.totalChunks; i++) {
         chunkPromises.push(this.loadChunk(job, i));
       }
       
@@ -467,17 +468,18 @@ export class EnhancedMemoryManager extends EventEmitter {
       job.status = 'completed';
       this.emit('streamingCompleted', { jobId: job.id, datasetId: job.datasetId });
       
-    } catch (error) {
+    } catch (error: unknown) {
       job.status = 'failed';
-      job.error = error.message;
-      this.emit('streamingFailed', { jobId: job.id, error: error.message });
+      job.error = error instanceof Error ? error.message : 'Unknown error';
+      this.emit('streamingFailed', { jobId: job.id, error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 
-  private async loadChunk(job: any, chunkIndex: number): Promise<void> {
+  private async loadChunk(job: Record<string, unknown>, chunkIndex: number): Promise<void> {
     try {
-      const chunkSize = Math.min(job.strategy.chunkSize, job.totalSize - (chunkIndex * job.strategy.chunkSize));
-      const chunkId = `${job.id}-chunk-${chunkIndex}`;
+      const jobWithProps = job as Record<string, unknown> & { strategy: { chunkSize: number; compressionLevel: number }; totalSize: number; bufferPool: Map<number, string>; chunksLoaded: number; totalChunks: number };
+      const chunkSize = Math.min(jobWithProps.strategy.chunkSize, jobWithProps.totalSize - (chunkIndex * jobWithProps.strategy.chunkSize));
+      // const chunkId = `${job.id}-chunk-${chunkIndex}`;
       
       // Simulate chunk loading (in real implementation, load from network/storage)
       const chunkData = new Uint8Array(chunkSize);
@@ -495,18 +497,18 @@ export class EnhancedMemoryManager extends EventEmitter {
         const segment = this.activeSegments.get(segmentId);
         if (segment) {
           segment.data = chunkData;
-          job.bufferPool.set(chunkIndex, segmentId);
-          job.chunksLoaded++;
+          jobWithProps.bufferPool.set(chunkIndex, segmentId);
+          jobWithProps.chunksLoaded++;
           
           // Compress if enabled
-          if (job.strategy.compressionLevel > 0) {
+          if (jobWithProps.strategy.compressionLevel > 0) {
             await this.compressSegment(segmentId);
           }
           
           this.emit('chunkLoaded', {
             jobId: job.id,
             chunkIndex,
-            progress: job.chunksLoaded / job.totalChunks
+            progress: jobWithProps.chunksLoaded / jobWithProps.totalChunks
           });
         }
       }
@@ -734,12 +736,12 @@ export class EnhancedMemoryManager extends EventEmitter {
   }
 
   // Public API methods
-  public setPerformanceOptimizer(optimizer: PerformanceOptimizer): void {
-    this.performanceOptimizer = optimizer;
+  public setPerformanceOptimizer(_optimizer: PerformanceOptimizer): void {
+    // this._performanceOptimizer = optimizer;
   }
 
-  public setNetworkManager(network: EnhancedDICOMNetwork): void {
-    this.networkManager = network;
+  public setNetworkManager(_network: EnhancedDICOMNetwork): void {
+    // this._networkManager = network;
   }
 
   public getMemoryUsage(): { [poolId: string]: { used: number; total: number; efficiency: number } } {
@@ -764,7 +766,7 @@ export class EnhancedMemoryManager extends EventEmitter {
     return this.metrics.length > 0 ? this.metrics[this.metrics.length - 1] : null;
   }
 
-  public getStreamingJobs(): any[] {
+  public getStreamingJobs(): Record<string, unknown>[] {
     return Array.from(this.streamingJobs.values());
   }
 

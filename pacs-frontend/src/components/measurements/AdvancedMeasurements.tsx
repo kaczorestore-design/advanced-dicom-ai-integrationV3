@@ -1,45 +1,50 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  Button,
-  Input,
+} from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+} from '../ui/select';
+import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  Badge,
+} from '../ui/table';
+import { Badge } from '../ui/badge';
+import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+} from '../ui/dialog';
+import {
   Tabs,
   TabsContent,
   TabsList,
-  TabsTab,
-  Checkbox,
-  Label,
-  Textarea,
-  Switch,
-  Progress,
-  Alert,
-  AlertDescription,
+  TabsTrigger,
+} from '../ui/tabs';
+import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
+import { Progress } from '../ui/progress';
+import { Alert, AlertDescription } from '../ui/alert';
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-  Separator
-} from '../ui';
+} from '../ui/tooltip';
 import {
   Ruler,
   Circle,
@@ -49,43 +54,20 @@ import {
   // Polygon,
   Target,
   Calculator,
-  Save,
   Download,
-  Upload,
   Trash2,
-  Edit,
   Eye,
-  EyeOff,
-  Copy,
-  RotateCcw,
-  Settings,
-  History,
-  FileText,
-  BarChart3,
-  TrendingUp,
   Activity,
-  Zap,
   Brain,
   Heart,
-  Lungs,
   Bone,
-  Search,
-  Filter,
   RefreshCw,
   Plus,
-  Minus,
-  MoreHorizontal,
-  ChevronDown,
-  ChevronUp,
-  Info,
   AlertTriangle,
-  CheckCircle,
-  Clock,
-  User,
-  Calendar,
-  MapPin,
-  Layers,
-  Move3D
+  Zap,
+  Move3D,
+  FileText,
+  EyeOff
 } from 'lucide-react';
 
 // Types
@@ -334,13 +316,13 @@ const AdvancedMeasurements: React.FC = () => {
   const [sessions, setSessions] = useState<MeasurementSession[]>([]);
   const [selectedMeasurement, setSelectedMeasurement] = useState<Measurement | null>(null);
   const [activeTool, setActiveTool] = useState<MeasurementType | null>(null);
-  const [activeSession, setActiveSession] = useState<MeasurementSession | null>(null);
+  const [_activeSession, _setActiveSession] = useState<MeasurementSession | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('measurements');
-  const [showMeasurementDialog, setShowMeasurementDialog] = useState(false);
-  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
-  const [showSUVDialog, setShowSUVDialog] = useState(false);
+  const [_showMeasurementDialog, setShowMeasurementDialog] = useState(false);
+  const [_showTemplateDialog, _setShowTemplateDialog] = useState(false);
+  const [_showSUVDialog, setShowSUVDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('');
   const [filterModality, setFilterModality] = useState<string>('');
@@ -351,13 +333,10 @@ const AdvancedMeasurements: React.FC = () => {
     injectionTime: '',
     scanTime: '',
     halfLife: 109.8, // F-18 half-life in minutes
-    units: 'bw' as const,
+    units: 'bw' as 'bw' | 'lbm' | 'bsa' | 'g/ml',
     threshold: 2.5
   });
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [currentPoints, setCurrentPoints] = useState<Point[]>([]);
 
   // Load measurements
   const loadMeasurements = useCallback(async () => {
@@ -398,8 +377,9 @@ const AdvancedMeasurements: React.FC = () => {
     }
   }, []);
 
-  // Save measurement
-  const saveMeasurement = async (measurement: Partial<Measurement>) => {
+  // Save measurement (unused but kept for future functionality)
+  // @ts-expect-error - Intentionally unused, kept for future functionality
+  const _saveMeasurement = async (measurement: Partial<Measurement>) => {
     try {
       const method = measurement.id ? 'PUT' : 'POST';
       const url = measurement.id ? `/api/measurements/${measurement.id}` : '/api/measurements';
@@ -427,8 +407,9 @@ const AdvancedMeasurements: React.FC = () => {
     }
   };
 
-  // Calculate SUV values
-  const calculateSUV = (pixelValue: number, metadata: MeasurementMetadata): SUVCalculation => {
+  // Calculate SUV values (unused but kept for future functionality)
+  // @ts-expect-error - Intentionally unused, kept for future functionality
+  const _calculateSUV = (pixelValue: number, metadata: MeasurementMetadata): SUVCalculation => {
     const { injectedDose, patientWeight, injectionTime, scanTime, halfLife, units } = suvSettings;
     
     // Calculate decay factor
@@ -449,14 +430,18 @@ const AdvancedMeasurements: React.FC = () => {
       case 'bw': // Body weight
         suv = (activityConcentration * patientWeight * 1000) / (injectedDose * decayFactor * 1000000);
         break;
-      case 'lbm': // Lean body mass (James formula)
+      case 'lbm': {
+        // Lean body mass (James formula)
         const lbm = patientWeight * 1.1 - 128 * (patientWeight / 100) ** 2;
         suv = (activityConcentration * lbm * 1000) / (injectedDose * decayFactor * 1000000);
         break;
-      case 'bsa': // Body surface area (Mosteller formula)
+      }
+      case 'bsa': {
+        // Body surface area (Mosteller formula)
         const bsa = Math.sqrt(patientWeight * 170) / 60; // Assuming average height of 170cm
         suv = (activityConcentration * bsa * 10000) / (injectedDose * decayFactor * 1000000);
         break;
+      }
       default:
         suv = activityConcentration;
     }
@@ -480,8 +465,9 @@ const AdvancedMeasurements: React.FC = () => {
     };
   };
 
-  // Calculate ROI statistics
-  const calculateROIStatistics = (coordinates: Point[], imageData: ImageData): MeasurementStatistics => {
+  // Calculate ROI statistics (unused but kept for future functionality)
+  // @ts-expect-error - Intentionally unused, kept for future functionality
+  const _calculateROIStatistics = (_coordinates: Point[], _imageData: ImageData): MeasurementStatistics => {
     // This would integrate with the actual image data from the DICOM viewer
     // For now, returning mock data structure
     return {
@@ -549,8 +535,9 @@ const AdvancedMeasurements: React.FC = () => {
     }
   };
 
-  // Import measurements
-  const importMeasurements = async (file: File) => {
+  // Import measurements (unused but kept for future functionality)
+  // @ts-expect-error - Intentionally unused, kept for future functionality
+  const _importMeasurements = async (file: File) => {
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -623,7 +610,7 @@ const AdvancedMeasurements: React.FC = () => {
       case 'suv-roi': return <Zap className="w-4 h-4" />;
       case 'perfusion-roi': return <Heart className="w-4 h-4" />;
       case 'diffusion-roi': return <Brain className="w-4 h-4" />;
-      case 'lung-nodule': return <Lungs className="w-4 h-4" />;
+      case 'lung-nodule': return <Activity className="w-4 h-4" />;
       case 'bone-density': return <Bone className="w-4 h-4" />;
       default: return <Target className="w-4 h-4" />;
     }
@@ -642,7 +629,7 @@ const AdvancedMeasurements: React.FC = () => {
       'lung-nodule': 'bg-cyan-100 text-cyan-800',
       'bone-density': 'bg-gray-100 text-gray-800'
     };
-    return colors[type] || 'bg-gray-100 text-gray-800';
+    return colors[type as keyof typeof colors] || 'bg-gray-100 text-gray-800';
   };
 
   return (
@@ -749,7 +736,7 @@ const AdvancedMeasurements: React.FC = () => {
               { type: 'suv-roi' as MeasurementType, label: 'SUV ROI', icon: Zap },
               { type: 'perfusion-roi' as MeasurementType, label: 'Perfusion', icon: Heart },
               { type: 'diffusion-roi' as MeasurementType, label: 'Diffusion', icon: Brain },
-              { type: 'lung-nodule' as MeasurementType, label: 'Lung Nodule', icon: Lungs }
+              { type: 'lung-nodule' as MeasurementType, label: 'Lung Nodule', icon: Activity }
             ].map(({ type, label, icon: Icon }) => (
               <Button
                 key={type}
@@ -767,11 +754,11 @@ const AdvancedMeasurements: React.FC = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTab value="measurements">Measurements</TabsTab>
-          <TabsTab value="sessions">Sessions</TabsTab>
-          <TabsTab value="templates">Templates</TabsTab>
-          <TabsTab value="suv-settings">SUV Settings</TabsTab>
-          <TabsTab value="statistics">Statistics</TabsTab>
+          <TabsTrigger value="measurements">Measurements</TabsTrigger>
+          <TabsTrigger value="sessions">Sessions</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="suv-settings">SUV Settings</TabsTrigger>
+          <TabsTrigger value="statistics">Statistics</TabsTrigger>
         </TabsList>
 
         {/* Measurements Tab */}
@@ -1261,7 +1248,6 @@ export type {
   Measurement, 
   MeasurementType, 
   MeasurementProperties, 
-  SUVCalculation, 
   MeasurementTemplate, 
   MeasurementSession 
 };

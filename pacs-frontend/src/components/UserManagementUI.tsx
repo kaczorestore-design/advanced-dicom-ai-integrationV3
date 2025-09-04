@@ -119,11 +119,6 @@ export const UserManagementUI: React.FC<UserManagementUIProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Load data on component mount
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
@@ -145,7 +140,7 @@ export const UserManagementUI: React.FC<UserManagementUIProps> = ({
       // Load sessions for current user if admin
       if (currentUser && hasPermission('users-read')) {
         // const sessionsData = await userManagementSystem.getAllSessions(); // Method doesn't exist
-        const sessionsData: Record<string, unknown>[] = [];
+        const sessionsData: UserSession[] = [];
         setSessions(sessionsData);
       }
       
@@ -159,12 +154,17 @@ export const UserManagementUI: React.FC<UserManagementUIProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [userManagementSystem, currentUser, hasPermission]);
+  }, [userManagementSystem, currentUser]);
 
   const hasPermission = useCallback((permission: string): boolean => {
     if (!currentUser) return false;
     return userManagementSystem.hasPermission(currentUser.id, permission, 'read');
   }, [currentUser, userManagementSystem]);
+
+  // Load data on component mount
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const filteredUsers = users.filter(user => {
     if (filters.searchTerm && 

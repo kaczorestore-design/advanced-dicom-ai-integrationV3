@@ -1,7 +1,7 @@
 // Mammography CAD Component
 // Computer-Aided Detection for breast imaging with lesion analysis
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -25,9 +25,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  TextField,
   IconButton,
-  Tooltip,
   Paper,
   Table,
   TableBody,
@@ -42,56 +40,17 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
-  Divider,
-  Badge,
-  Rating,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
-  Refresh as RefreshIcon,
-  Save as SaveIcon,
   Download as DownloadIcon,
-  Upload as UploadIcon,
   Settings as SettingsIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-  PlayArrow as PlayIcon,
-  Pause as PauseIcon,
-  Stop as StopIcon,
   ZoomIn as ZoomInIcon,
   ZoomOut as ZoomOutIcon,
-  Tune as TuneIcon,
-  Assessment as AssessmentIcon,
-  Timeline as TimelineIcon,
-  ScatterPlot as ScatterPlotIcon,
-  ShowChart as ChartIcon,
-  Functions as FunctionIcon,
-  Science as ScienceIcon,
-  Analytics as AnalyticsIcon,
-  FilterAlt as FilterIcon,
-  AutoFixHigh as AutoIcon,
-  Calculate as CalculateIcon,
-  Biotech as BiotechIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  Info as InfoIcon,
   Search as SearchIcon,
-  Compare as CompareIcon,
-  CenterFocusStrong as FocusIcon,
-  Straighten as MeasureIcon,
-  Crop as CropIcon,
-  Contrast as ContrastIcon,
-  Brightness6 as BrightnessIcon,
-  RadioButtonChecked as CircleIcon,
-  CropFree as RectangleIcon,
-  Timeline as LineIcon,
-  MyLocation as PointIcon
+  Error as ErrorIcon
 } from '@mui/icons-material';
 
 // CAD Data Structures
@@ -346,7 +305,7 @@ const MammographyCAD: React.FC = () => {
     enablePreprocessing: true,
     autoAnalysis: false
   });
-  const [preprocessing, setPreprocessing] = useState<PreprocessingSettings>({
+  const [preprocessing] = useState<PreprocessingSettings>({
     contrastEnhancement: {
       enabled: true,
       method: 'CLAHE',
@@ -375,11 +334,8 @@ const MammographyCAD: React.FC = () => {
   const [windowLevel, setWindowLevel] = useState(50);
   const [windowWidth, setWindowWidth] = useState(100);
   const [showAnnotations, setShowAnnotations] = useState(true);
-  const [showMeasurements, setShowMeasurements] = useState(true);
+  const [_showMeasurements] = useState(true);
   const [filterDetections, setFilterDetections] = useState<string[]>(['mass', 'calcification', 'asymmetry', 'distortion']);
-  
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const imageCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Initialize with sample data
   useEffect(() => {
@@ -734,9 +690,9 @@ const MammographyCAD: React.FC = () => {
       suspicionLevel: Math.floor(Math.random() * 3) + 2 as 2 | 3 | 4,
       confidence: Math.random() * 0.3 + 0.6,
       features: {
-        shape: ['round', 'oval', 'irregular'][Math.floor(Math.random() * 3)] as any,
-        margin: ['circumscribed', 'microlobulated', 'spiculated'][Math.floor(Math.random() * 3)] as any,
-        density: ['low', 'equal', 'high'][Math.floor(Math.random() * 3)] as any
+        shape: ['round', 'oval', 'irregular'][Math.floor(Math.random() * 3)] as 'round' | 'oval' | 'irregular',
+        margin: ['circumscribed', 'microlobulated', 'spiculated'][Math.floor(Math.random() * 3)] as 'circumscribed' | 'microlobulated' | 'spiculated',
+        density: ['low', 'equal', 'high'][Math.floor(Math.random() * 3)] as 'low' | 'equal' | 'high'
       },
       measurements: {
         size: Math.random() * 20 + 5,
@@ -764,7 +720,7 @@ const MammographyCAD: React.FC = () => {
 
   // Visualization Functions
   const drawMammographyImage = useCallback(() => {
-    const canvas = imageCanvasRef.current;
+    const canvas = document.createElement('canvas');
     if (!canvas || !study || !selectedView) return;
     
     const ctx = canvas.getContext('2d');
@@ -879,16 +835,18 @@ const MammographyCAD: React.FC = () => {
         ctx.lineWidth = 2;
         
         switch (annotation.type) {
-          case 'circle':
+          case 'circle': {
             const [cx, cy, radius] = annotation.coordinates;
             ctx.beginPath();
             ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
             ctx.stroke();
             break;
-          case 'rectangle':
+          }
+          case 'rectangle': {
             const [rx, ry, rw, rh] = annotation.coordinates;
             ctx.strokeRect(rx, ry, rw, rh);
             break;
+          }
         }
         
         if (annotation.text) {
@@ -974,7 +932,11 @@ const MammographyCAD: React.FC = () => {
         
         <Box sx={{ height: 500, bgcolor: 'black', border: '1px solid #ddd', borderRadius: 1, position: 'relative' }}>
           <canvas
-            ref={imageCanvasRef}
+            ref={(canvas) => {
+              if (canvas) {
+                drawMammographyImage();
+              }
+            }}
             width={800}
             height={500}
             style={{ width: '100%', height: '100%', cursor: 'crosshair' }}
@@ -1005,7 +967,7 @@ const MammographyCAD: React.FC = () => {
         
         <Box sx={{ mt: 2 }}>
           <Grid container spacing={2}>
-            <Grid item xs={6}>
+            <Grid size={6}>
               <Typography gutterBottom>Window Level</Typography>
               <Slider
                 value={windowLevel}
@@ -1015,7 +977,7 @@ const MammographyCAD: React.FC = () => {
                 valueLabelDisplay="auto"
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid size={6}>
               <Typography gutterBottom>Window Width</Typography>
               <Slider
                 value={windowWidth}
@@ -1348,7 +1310,7 @@ const MammographyCAD: React.FC = () => {
               </Typography>
               <Chip
                 label={`Category ${study.biRadsAssessment.category}`}
-                size="large"
+                size="medium"
                 color={
                   study.biRadsAssessment.category <= 2 ? 'success' :
                   study.biRadsAssessment.category === 3 ? 'warning' : 'error'
@@ -1433,11 +1395,11 @@ const MammographyCAD: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           {renderImageViewer()}
         </Grid>
         
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <Tabs value={activeTab} onChange={(_, value) => setActiveTab(value)}>
             <Tab label="CAD" />
             <Tab label="Detections" />

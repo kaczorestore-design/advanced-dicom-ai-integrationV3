@@ -1,46 +1,25 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Switch } from './ui/switch';
-import { Slider } from './ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
 import { 
   FileText, 
   Search,
-  Filter,
   Download,
   Upload,
-  Save,
   Edit,
   Eye,
-  EyeOff,
   Plus,
   Minus,
-  Copy,
-  Trash2,
-  Calendar,
-  User,
   Clock,
-  Tag,
-  AlertCircle,
   CheckCircle,
-  XCircle,
   Info,
-  Stethoscope,
   Activity,
   Target,
-  Layers,
-  BookOpen,
-  Database,
-  Settings,
-  RefreshCw,
-  ExternalLink,
-  Printer,
-  Share2
+  RefreshCw
 } from 'lucide-react';
 
 interface DICOMSRViewerProps {
@@ -181,7 +160,7 @@ interface SRMetadata {
   institutionName: string;
   manufacturerModelName: string;
   softwareVersions: string[];
-  acquisitionContext: any;
+  acquisitionContext: Record<string, unknown>;
 }
 
 type SRDocumentType = 
@@ -198,7 +177,7 @@ type SRDocumentType =
 
 const DICOMSRViewer: React.FC<DICOMSRViewerProps> = ({
   srData,
-  theme,
+  theme: _theme,
   onSRChange,
   onFindingSelect,
   onMeasurementSelect
@@ -210,11 +189,11 @@ const DICOMSRViewer: React.FC<DICOMSRViewerProps> = ({
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [filterSeverity, setFilterSeverity] = useState<string>('all');
   const [showMetadata, setShowMetadata] = useState(false);
-  const [editMode, setEditMode] = useState(false);
+  const [, ] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['findings']));
 
   // SR Templates
-  const [srTemplates] = useState([
+  const [_srTemplates] = useState([
     {
       id: 'chest_ct_template',
       name: 'Chest CT Report',
@@ -235,16 +214,6 @@ const DICOMSRViewer: React.FC<DICOMSRViewerProps> = ({
     }
   ]);
 
-  // Predefined anatomical locations
-  const anatomicalLocations = [
-    { organ: 'Lung', regions: ['Upper Lobe', 'Middle Lobe', 'Lower Lobe'] },
-    { organ: 'Heart', regions: ['Left Ventricle', 'Right Ventricle', 'Left Atrium', 'Right Atrium'] },
-    { organ: 'Brain', regions: ['Frontal Lobe', 'Parietal Lobe', 'Temporal Lobe', 'Occipital Lobe'] },
-    { organ: 'Liver', regions: ['Right Lobe', 'Left Lobe', 'Caudate Lobe', 'Quadrate Lobe'] },
-    { organ: 'Kidney', regions: ['Upper Pole', 'Mid Pole', 'Lower Pole'] }
-  ];
-
-  const contentTreeRef = useRef<HTMLDivElement>(null);
 
   // Initialize with sample SR data if none provided
   useEffect(() => {
@@ -703,7 +672,7 @@ const DICOMSRViewer: React.FC<DICOMSRViewerProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2">
-                      <Stethoscope className="w-5 h-5" />
+                      <Activity className="w-5 h-5" />
                       Recommendations ({currentSR.recommendations.length})
                     </CardTitle>
                     {expandedSections.has('recommendations') ? <Minus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}

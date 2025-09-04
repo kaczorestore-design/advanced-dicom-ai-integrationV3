@@ -605,7 +605,7 @@ const SegmentationTools: React.FC<SegmentationToolsProps> = ({
                   <label className="text-sm font-medium">Connectivity</label>
                   <Select 
                     value={currentTool.connectivity} 
-                    onValueChange={(value: any) => updateTool({ connectivity: value })}
+                    onValueChange={(value: string) => updateTool({ connectivity: value as SegmentationTool['connectivity'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />

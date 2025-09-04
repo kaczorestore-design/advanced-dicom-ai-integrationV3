@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
-import { Badge } from './ui/badge';
+// import { Badge } from './ui/badge';
 import { Slider } from './ui/slider';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  // DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
   DropdownMenuLabel,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger
+  // DropdownMenuSub,
+  // DropdownMenuSubContent,
+  // DropdownMenuSubTrigger
 } from './ui/dropdown-menu';
 import {
   Tooltip,
@@ -24,28 +24,28 @@ import {
 } from './ui/tooltip';
 import {
   // Basic Tools
-  Eye, ZoomIn, ZoomOut, Move3D, RotateCw, Maximize, RefreshCw,
+  Eye, ZoomIn, /* ZoomOut, */ Move3D, RotateCw, Maximize, RefreshCw,
   // Measurement Tools
   Ruler, Square, Circle, Triangle, Pen, Scissors,
   // Advanced Tools
   Layers, Volume2, Brain, Activity, Zap, Target,
   // 3D Tools
-  Box, Sphere, Cylinder, Grid3X3,
+  /* Box, Sphere, Cylinder, */ Grid3X3,
   // Analysis Tools
   BarChart3, LineChart, PieChart, TrendingUp, Calculator,
   // Export/Import
-  Download, Upload, Save, FileImage, FileVideo, FileText,
+  Download, /* Upload, Save, */ FileImage, FileVideo, FileText,
   // Settings
-  Settings, Palette, Layout, Monitor,
+  Settings, /* Palette, Layout, Monitor, */
   // Navigation
-  ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
-  Play, Pause, SkipBack, SkipForward, RotateCcw,
+  /* ChevronLeft, ChevronRight, ChevronUp, ChevronDown, */
+  /* Play, Pause, SkipBack, SkipForward, RotateCcw, */
   // Advanced Features
-  Microscope, Stethoscope, Heart, Bone, Lung,
+  /* Microscope, Stethoscope, */ Heart, Bone, /* Lung, */
   // UI Controls
-  MoreHorizontal, Pin, PinOff, Expand, Shrink,
+  MoreHorizontal, Pin, PinOff, Expand, /* Shrink, */
   // Specialized
-  Crosshair, Focus, Contrast, Sun, Moon
+  Crosshair, Focus, Contrast /* Sun, Moon */
 } from 'lucide-react';
 
 interface ToolbarConfig {
@@ -276,7 +276,7 @@ export default function ExpandableToolbar({
   };
 
   // Render tool button
-  const renderToolButton = (tool: any, groupId: string) => {
+  const renderToolButton = (tool: Record<string, unknown> & { id: string; icon: React.ComponentType<{ className?: string }>; label: string; shortcut?: string }, _groupId: string) => {
     if (!config.enabledTools.includes(tool.id)) return null;
 
     const isActive = activeTool === tool.id;
@@ -311,8 +311,8 @@ export default function ExpandableToolbar({
   };
 
   // Render tool group
-  const renderToolGroup = (groupId: string, group: any) => {
-    const enabledTools = group.tools.filter((tool: any) => config.enabledTools.includes(tool.id));
+  const renderToolGroup = (groupId: string, group: Record<string, unknown> & { tools: Array<Record<string, unknown> & { id: string; icon: React.ComponentType<{ className?: string }>; label: string; shortcut?: string }>; label: string }) => {
+    const enabledTools = group.tools.filter((tool) => config.enabledTools.includes(tool.id));
     if (enabledTools.length === 0) return null;
 
     return (
@@ -325,7 +325,7 @@ export default function ExpandableToolbar({
           </div>
         )}
         <div className="flex flex-col space-y-1">
-          {enabledTools.map((tool: any) => renderToolButton(tool, groupId))}
+          {enabledTools.map((tool: Record<string, unknown> & { id: string; icon: React.ComponentType<{ className?: string }>; label: string; shortcut?: string }) => renderToolButton(tool, groupId))}
         </div>
         {isExpanded && <Separator className="my-2" />}
       </div>

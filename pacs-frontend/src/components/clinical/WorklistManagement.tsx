@@ -1,66 +1,25 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
+import { Label } from '../ui/label';
+import { Progress } from '../ui/progress';
+import { Alert, AlertDescription } from '../ui/alert';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../ui/select';
+import { MoreHorizontal, Eye, Edit } from 'lucide-react';
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Button,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  Badge,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTab,
-  Checkbox,
-  Label,
-  Textarea,
-  DatePicker,
-  TimePicker,
-  Progress,
-  Alert,
-  AlertDescription,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '../ui';
-import {
-  Search,
   Filter,
-  Calendar,
-  Clock,
-  User,
   FileText,
   Download,
-  Upload,
   RefreshCw,
-  Settings,
-  Eye,
-  Edit,
-  Trash2,
   Plus,
   CheckCircle,
-  XCircle,
   AlertCircle,
-  Play,
-  Pause,
-  MoreHorizontal
+  Play
 } from 'lucide-react';
 
 // Types
@@ -119,10 +78,10 @@ const WorklistManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<WorklistStats | null>(null);
-  const [activeTab, setActiveTab] = useState('worklist');
+  const [_activeTab, _setActiveTab] = useState('worklist');
   const [showFilters, setShowFilters] = useState(false);
-  const [editingItem, setEditingItem] = useState<WorklistItem | null>(null);
-  const [showNewItemDialog, setShowNewItemDialog] = useState(false);
+  const [_editingItem, _setEditingItem] = useState<WorklistItem | null>(null);
+  const [_showNewItemDialog, _setShowNewItemDialog] = useState(false);
 
   // Filter state
   const [filters, setFilters] = useState<WorklistFilter>({
@@ -329,7 +288,7 @@ const WorklistManagement: React.FC = () => {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={() => setShowNewItemDialog(true)}>
+          <Button onClick={() => _setShowNewItemDialog(true)}>
             <Plus className="w-4 h-4 mr-2" />
             New Study
           </Button>
@@ -405,21 +364,23 @@ const WorklistManagement: React.FC = () => {
               <div>
                 <Label>Date Range</Label>
                 <div className="flex gap-2">
-                  <DatePicker
-                    selected={filters.dateRange.start}
-                    onChange={(date) => setFilters(prev => ({
+                  <Input
+                    type="date"
+                    value={filters.dateRange.start ? filters.dateRange.start.toISOString().split('T')[0] : ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters(prev => ({
                       ...prev,
-                      dateRange: { ...prev.dateRange, start: date }
+                      dateRange: { ...prev.dateRange, start: e.target.value ? new Date(e.target.value) : null }
                     }))}
-                    placeholderText="Start date"
+                    placeholder="Start date"
                   />
-                  <DatePicker
-                    selected={filters.dateRange.end}
-                    onChange={(date) => setFilters(prev => ({
+                  <Input
+                    type="date"
+                    value={filters.dateRange.end ? filters.dateRange.end.toISOString().split('T')[0] : ''}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters(prev => ({
                       ...prev,
-                      dateRange: { ...prev.dateRange, end: date }
+                      dateRange: { ...prev.dateRange, end: e.target.value ? new Date(e.target.value) : null }
                     }))}
-                    placeholderText="End date"
+                    placeholder="End date"
                   />
                 </div>
               </div>
@@ -429,7 +390,7 @@ const WorklistManagement: React.FC = () => {
                 <Input
                   placeholder="Search patient..."
                   value={filters.patientName}
-                  onChange={(e) => setFilters(prev => ({ ...prev, patientName: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters(prev => ({ ...prev, patientName: e.target.value }))}
                 />
               </div>
               
@@ -438,7 +399,7 @@ const WorklistManagement: React.FC = () => {
                 <Input
                   placeholder="Search accession..."
                   value={filters.accessionNumber}
-                  onChange={(e) => setFilters(prev => ({ ...prev, accessionNumber: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters(prev => ({ ...prev, accessionNumber: e.target.value }))}
                 />
               </div>
               
@@ -447,7 +408,7 @@ const WorklistManagement: React.FC = () => {
                 <Input
                   placeholder="Search physician..."
                   value={filters.physician}
-                  onChange={(e) => setFilters(prev => ({ ...prev, physician: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilters(prev => ({ ...prev, physician: e.target.value }))}
                 />
               </div>
             </div>
@@ -607,7 +568,7 @@ const WorklistManagement: React.FC = () => {
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <Button size="sm" variant="ghost" onClick={() => setEditingItem(item)}>
+                              <Button size="sm" variant="ghost" onClick={() => _setEditingItem(item)}>
                                 <Edit className="w-4 h-4" />
                               </Button>
                             </TooltipTrigger>

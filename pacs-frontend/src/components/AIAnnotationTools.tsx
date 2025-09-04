@@ -1,10 +1,3 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
-// import * as cornerstone from 'cornerstone-core';
-// import * as cornerstoneTools from 'cornerstone-tools';
-// TODO: Update imports for Cornerstone.js 3D API
-// import { RenderingEngine, Types, Enums } from '@cornerstonejs/core';
-// import { ToolGroupManager, Enums as csToolsEnums } from '@cornerstonejs/tools';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface AIAnnotation {
   id: string;
@@ -37,10 +30,19 @@ export interface AIAnalysisResult {
   modelUsed: string;
   findings: {
     pathologies: string[];
-    measurements: any[];
+    measurements: MeasurementResult[];
     recommendations: string[];
   };
 }
+
+interface MeasurementResult {
+  id: string;
+  type: string;
+  value: number;
+  unit: string;
+  coordinates: { x: number; y: number }[];
+}
+
 
 export interface AIAnnotationConfig {
   enableAutoDetection: boolean;
@@ -59,7 +61,7 @@ export class AIAnnotationTools {
   private annotations: Map<string, AIAnnotation> = new Map();
   private activeElement: HTMLElement | null = null;
   private config: AIAnnotationConfig;
-  private eventListeners: { [key: string]: Function[] } = {};
+  private eventListeners: { [key: string]: ((data?: unknown) => void)[] } = {};
   private isInitialized = false;
   private analysisCache: Map<string, AIAnalysisResult> = new Map();
   private processingQueue: string[] = [];
@@ -98,7 +100,7 @@ export class AIAnnotationTools {
     }
   }
 
-  private async setupAITools(): void {
+  private async setupAITools(): Promise<void> {
     // Register AI-powered annotation tools
     this.registerAutoDetectionTool();
     this.registerSmartSuggestionTool();
@@ -107,143 +109,23 @@ export class AIAnnotationTools {
   }
 
   private registerAutoDetectionTool(): void {
-    const AutoDetectionTool = cornerstoneTools.importInternal('base/BaseTool');
-    
-    class AIAutoDetectionTool extends AutoDetectionTool {
-      constructor(props = {}) {
-        const defaultProps = {
-          name: 'AIAutoDetection',
-          supportedInteractionTypes: ['Mouse', 'Touch'],
-          configuration: {
-            preventHandleOutsideImage: false,
-            drawHandlesOnHover: true,
-            hideHandlesIfMoving: false,
-            renderDashed: false
-          }
-        };
-        super(props, defaultProps);
-      }
-
-      async activeCallback(element: HTMLElement, options: any) {
-        if (!this.config.enableAutoDetection) return;
-        
-        try {
-          // TODO: Update for Cornerstone3D
-          // const enabledElement = cornerstone.getEnabledElement(element);
-          const enabledElement = null;
-          const imageId = enabledElement?.image?.imageId;
-          
-          if (imageId) {
-            await this.performAutoDetection(imageId, element);
-          }
-        } catch (error) {
-          console.error('Auto-detection failed:', error);
-        }
-      }
-
-      async performAutoDetection(imageId: string, element: HTMLElement) {
-        const analysisResult = await this.analyzeImage(imageId);
-        
-        if (analysisResult && analysisResult.detections.length > 0) {
-          analysisResult.detections.forEach(detection => {
-            if (detection.confidence >= this.config.confidenceThreshold) {
-              this.createAIAnnotation(detection, element);
-            }
-          });
-        }
-      }
-    }
-
-    // cornerstoneTools.addTool(AIAutoDetectionTool); // TODO: Update for Cornerstone3D
+    // TODO: Update for Cornerstone3D - cornerstoneTools is not available
+    console.log('Auto detection tool registration skipped - awaiting Cornerstone3D implementation');
   }
 
   private registerSmartSuggestionTool(): void {
-    const SmartSuggestionTool = cornerstoneTools.importInternal('base/BaseTool');
-    
-    class AISmartSuggestionTool extends SmartSuggestionTool {
-      constructor(props = {}) {
-        const defaultProps = {
-          name: 'AISmartSuggestion',
-          supportedInteractionTypes: ['Mouse', 'Touch']
-        };
-        super(props, defaultProps);
-      }
-
-      async mouseMoveCallback(evt: any) {
-        if (!this.config.enableSmartSuggestions) return;
-        
-        const eventData = evt.detail;
-        const element = eventData.element;
-        const currentPoints = eventData.currentPoints;
-        
-        // Provide smart suggestions based on cursor position
-        await this.provideSuggestions(currentPoints, element);
-      }
-
-      async provideSuggestions(point: any, element: HTMLElement) {
-        const suggestions = await this.getAISuggestions(point, element);
-        
-        if (suggestions.length > 0) {
-          this.displaySuggestions(suggestions, point, element);
-        }
-      }
-    }
-
-    // cornerstoneTools.addTool(AISmartSuggestionTool); // TODO: Update for Cornerstone3D
+    // TODO: Update for Cornerstone3D - cornerstoneTools is not available
+    console.log('Smart suggestion tool registration skipped - awaiting Cornerstone3D implementation');
   }
 
   private registerQualityAssuranceTool(): void {
-    const QualityAssuranceTool = cornerstoneTools.importInternal('base/BaseTool');
-    
-    class AIQualityAssuranceTool extends QualityAssuranceTool {
-      constructor(props = {}) {
-        const defaultProps = {
-          name: 'AIQualityAssurance',
-          supportedInteractionTypes: ['Mouse', 'Touch']
-        };
-        super(props, defaultProps);
-      }
-
-      async validateMeasurement(measurement: any, element: HTMLElement) {
-        if (!this.config.enableQualityAssurance) return;
-        
-        const validation = await this.performQualityCheck(measurement);
-        
-        if (validation.hasIssues) {
-          this.highlightQualityIssues(validation.issues, element);
-        }
-      }
-    }
-
-    // cornerstoneTools.addTool(AIQualityAssuranceTool); // TODO: Update for Cornerstone3D
+    // TODO: Update for Cornerstone3D - cornerstoneTools is not available
+    console.log('Quality assurance tool registration skipped - awaiting Cornerstone3D implementation');
   }
 
   private registerPathologyHighlightTool(): void {
-    const PathologyHighlightTool = cornerstoneTools.importInternal('base/BaseTool');
-    
-    class AIPathologyHighlightTool extends PathologyHighlightTool {
-      constructor(props = {}) {
-        const defaultProps = {
-          name: 'AIPathologyHighlight',
-          supportedInteractionTypes: ['Mouse', 'Touch']
-        };
-        super(props, defaultProps);
-      }
-
-      async highlightPathologies(element: HTMLElement) {
-        if (!this.config.highlightCriticalFindings) return;
-        
-        const pathologies = await this.detectPathologies(element);
-        
-        pathologies.forEach(pathology => {
-          if (pathology.severity === 'critical' || pathology.severity === 'high') {
-            this.createPathologyHighlight(pathology, element);
-          }
-        });
-      }
-    }
-
-    // cornerstoneTools.addTool(AIPathologyHighlightTool); // TODO: Update for Cornerstone3D
+    // TODO: Update for Cornerstone3D - cornerstoneTools is not available
+    console.log('Pathology highlight tool registration skipped - awaiting Cornerstone3D implementation');
   }
 
   private setupEventHandlers(): void {
@@ -252,13 +134,14 @@ export class AIAnnotationTools {
     // Listen for image changes to trigger AI analysis
     this.activeElement.addEventListener('cornerstoneimagerendered', this.handleImageRendered.bind(this));
     this.activeElement.addEventListener('cornerstonemeasurementadded', this.handleMeasurementAdded.bind(this));
-    this.activeElement.addEventListener('cornerstonemeasurementmodified', this.handleMeasurementModified.bind(this));
+    this.activeElement.addEventListener('cornerstonemeasurementmodified', this.handleMeasurementModified.bind(this) as unknown as EventListener);
   }
 
-  private async handleImageRendered(evt: any): Promise<void> {
+  private async handleImageRendered(evt: Event): Promise<void> {
+    const customEvt = evt as Event & { detail: { image?: { imageId?: string } } };
     if (!this.config.enableRealTimeAnalysis) return;
     
-    const eventData = evt.detail;
+    const eventData = customEvt.detail;
     const imageId = eventData.image?.imageId;
     
     if (imageId && !this.analysisCache.has(imageId)) {
@@ -266,8 +149,9 @@ export class AIAnnotationTools {
     }
   }
 
-  private async handleMeasurementAdded(evt: any): Promise<void> {
-    const measurementData = evt.detail;
+  private async handleMeasurementAdded(evt: Event): Promise<void> {
+    const customEvt = evt as Event & { detail: unknown };
+    const measurementData = customEvt.detail;
     
     if (this.config.enableSmartSuggestions) {
       await this.provideMeasurementSuggestions(measurementData);
@@ -278,7 +162,7 @@ export class AIAnnotationTools {
     }
   }
 
-  private async handleMeasurementModified(evt: any): Promise<void> {
+  private async handleMeasurementModified(evt: Event & { detail: unknown }): Promise<void> {
     const measurementData = evt.detail;
     
     if (this.config.enableQualityAssurance) {
@@ -358,12 +242,11 @@ export class AIAnnotationTools {
     return null;
   }
 
-  private async getAISuggestions(point: any, element: HTMLElement): Promise<any[]> {
+  private async getAISuggestions(point: { image: { x: number; y: number } }): Promise<AIAnalysisResult[]> {
     try {
       // TODO: Update for Cornerstone3D
       // const enabledElement = cornerstone.getEnabledElement(element);
       // const imageId = enabledElement?.image?.imageId;
-      const enabledElement = null;
       const imageId = null;
 
       if (!imageId) return [];
@@ -392,7 +275,7 @@ export class AIAnnotationTools {
     return [];
   }
 
-  private async performQualityCheck(measurement: any): Promise<any> {
+  private async performQualityCheck(measurement: unknown): Promise<{ hasIssues: boolean; issues: unknown[] }> {
     try {
       const response = await fetch(`${this.config.modelEndpoint}/quality-check`, {
         method: 'POST',
@@ -416,128 +299,10 @@ export class AIAnnotationTools {
     return { hasIssues: false, issues: [] };
   }
 
-  private async detectPathologies(element: HTMLElement): Promise<AIAnnotation[]> {
-    try {
-      // TODO: Update for Cornerstone3D
-      // const enabledElement = cornerstone.getEnabledElement(element);
-      // const imageId = enabledElement?.image?.imageId;
-      const enabledElement = null;
-      const imageId = null;
-      
-      if (!imageId) return [];
-      
-      const analysisResult = await this.analyzeImage(imageId);
-      
-      if (analysisResult) {
-        return analysisResult.detections.filter(detection => 
-          detection.type === 'pathology-highlight' && 
-          (detection.severity === 'critical' || detection.severity === 'high')
-        );
-      }
-    } catch (error) {
-      console.error('Pathology detection failed:', error);
-    }
-    
-    return [];
-  }
 
-  private createAIAnnotation(detection: AIAnnotation, element: HTMLElement): void {
-    const annotation: AIAnnotation = {
-      ...detection,
-      id: uuidv4(),
-      timestamp: new Date(),
-      validated: this.config.autoValidateHighConfidence && detection.confidence >= 0.9
-    };
-    
-    this.annotations.set(annotation.id, annotation);
-    
-    // Create visual annotation on the image
-    this.renderAnnotation(annotation, element);
-    
-    // Emit event
-    this.emit('annotationAdded', annotation);
-  }
 
-  private renderAnnotation(annotation: AIAnnotation, element: HTMLElement): void {
-    try {
-      // TODO: Update for Cornerstone3D
-      // const enabledElement = cornerstone.getEnabledElement(element);
-      // const context = enabledElement.canvas.getContext('2d');
-      const enabledElement = null;
-      const context = null;
 
-      if (!context) return;
-      
-      // Set annotation style based on type and confidence
-      const color = this.getAnnotationColor(annotation);
-      const lineWidth = annotation.severity === 'critical' ? 3 : 2;
-      
-      context.strokeStyle = color;
-      context.lineWidth = lineWidth;
-      context.setLineDash(annotation.validated ? [] : [5, 5]);
-      
-      // Draw annotation based on coordinates
-      if (annotation.coordinates.length >= 2) {
-        context.beginPath();
-        const [x1, y1] = annotation.coordinates[0];
-        context.moveTo(x1, y1);
-        
-        for (let i = 1; i < annotation.coordinates.length; i++) {
-          const [x, y] = annotation.coordinates[i];
-          context.lineTo(x, y);
-        }
-        
-        if (annotation.type === 'pathology-highlight') {
-          context.closePath();
-          context.fillStyle = color + '40'; // Semi-transparent fill
-          context.fill();
-        }
-        
-        context.stroke();
-      }
-      
-      // Draw label and confidence score
-      if (this.config.showConfidenceScores) {
-        this.drawAnnotationLabel(annotation, context);
-      }
-    } catch (error) {
-      console.error('Failed to render annotation:', error);
-    }
-  }
 
-  private getAnnotationColor(annotation: AIAnnotation): string {
-    switch (annotation.type) {
-      case 'auto-detection':
-        return '#00ff00'; // Green
-      case 'smart-suggestion':
-        return '#ffff00'; // Yellow
-      case 'quality-check':
-        return '#ff8800'; // Orange
-      case 'pathology-highlight':
-        return annotation.severity === 'critical' ? '#ff0000' : '#ff4444'; // Red
-      default:
-        return '#ffffff'; // White
-    }
-  }
-
-  private drawAnnotationLabel(annotation: AIAnnotation, context: CanvasRenderingContext2D): void {
-    const [x, y] = annotation.coordinates[0];
-    const label = `${annotation.label} (${((annotation.confidence || 0) * 100).toFixed(0)}%)`;
-    
-    context.font = '12px Arial';
-    context.fillStyle = '#ffffff';
-    context.strokeStyle = '#000000';
-    context.lineWidth = 1;
-    
-    // Draw background
-    const metrics = context.measureText(label);
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    context.fillRect(x, y - 20, metrics.width + 10, 20);
-    
-    // Draw text
-    context.fillStyle = '#ffffff';
-    context.fillText(label, x + 5, y - 5);
-  }
 
   private queueImageForAnalysis(imageId: string): void {
     if (!this.processingQueue.includes(imageId)) {
@@ -559,16 +324,16 @@ export class AIAnnotationTools {
     this.isProcessing = false;
   }
 
-  private async provideMeasurementSuggestions(measurementData: any): Promise<void> {
+  private async provideMeasurementSuggestions(measurementData: unknown): Promise<void> {
     // Provide AI-powered suggestions for measurement improvement
-    const suggestions = await this.getAISuggestions(measurementData.currentPoints, this.activeElement!);
+    const suggestions = await this.getAISuggestions(measurementData as { image: { x: number; y: number } });
     
     if (suggestions.length > 0) {
       this.emit('measurementSuggestions', { measurement: measurementData, suggestions });
     }
   }
 
-  private async validateMeasurement(measurementData: any): Promise<void> {
+  private async validateMeasurement(measurementData: unknown): Promise<void> {
     const validation = await this.performQualityCheck(measurementData);
     
     if (validation.hasIssues) {
@@ -576,49 +341,8 @@ export class AIAnnotationTools {
     }
   }
 
-  private displaySuggestions(suggestions: any[], point: any, element: HTMLElement): void {
-    // Display AI suggestions as overlay
-    suggestions.forEach((suggestion, index) => {
-      const annotation: AIAnnotation = {
-        id: uuidv4(),
-        type: 'smart-suggestion',
-        confidence: suggestion.confidence,
-        coordinates: [[point.image.x, point.image.y + (index * 20)]],
-        label: suggestion.label,
-        description: suggestion.description,
-        aiModel: suggestion.model || 'suggestion-engine',
-        modelVersion: '1.0',
-        timestamp: new Date(),
-        validated: false
-      };
-      
-      this.renderAnnotation(annotation, element);
-    });
-  }
 
-  private highlightQualityIssues(issues: any[], element: HTMLElement): void {
-    issues.forEach(issue => {
-      const annotation: AIAnnotation = {
-        id: uuidv4(),
-        type: 'quality-check',
-        confidence: issue.confidence || 0.8,
-        coordinates: issue.coordinates || [[0, 0]],
-        label: 'Quality Issue',
-        description: issue.description,
-        aiModel: 'quality-assurance',
-        modelVersion: '1.0',
-        timestamp: new Date(),
-        validated: false,
-        severity: issue.severity || 'medium'
-      };
-      
-      this.renderAnnotation(annotation, element);
-    });
-  }
 
-  private createPathologyHighlight(pathology: AIAnnotation, element: HTMLElement): void {
-    this.createAIAnnotation(pathology, element);
-  }
 
   // Public API methods
   public activateAutoDetection(): void {
@@ -714,20 +438,20 @@ export class AIAnnotationTools {
     return xml;
   }
 
-  public on(event: string, callback: Function): void {
+  public on(event: string, callback: (data?: unknown) => void): void {
     if (!this.eventListeners[event]) {
       this.eventListeners[event] = [];
     }
     this.eventListeners[event].push(callback);
   }
 
-  public off(event: string, callback: Function): void {
+  public off(event: string, callback: (data?: unknown) => void): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
     }
   }
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: unknown): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event].forEach(callback => callback(data));
     }

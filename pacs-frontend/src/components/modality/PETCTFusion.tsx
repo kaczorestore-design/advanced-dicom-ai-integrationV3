@@ -177,7 +177,6 @@ const PETCTFusion: React.FC = () => {
     showGrid: false,
     showCrosshairs: true
   });
-  const [selectedROI] = useState<string | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
   const [registrationProgress, setRegistrationProgress] = useState(0);
   const [qualityMetrics, setQualityMetrics] = useState<FusionQualityMetrics | null>(null);
@@ -189,6 +188,21 @@ const PETCTFusion: React.FC = () => {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
+
+  const calculateQualityMetrics = useCallback(() => {
+    // Simulate quality metrics calculation
+    const metrics: FusionQualityMetrics = {
+      spatialAlignment: 0.92,
+      temporalAlignment: 0.88,
+      contrastToNoise: 15.2,
+      signalToNoise: 28.5,
+      uniformity: 0.85,
+      recovery: 0.78,
+      spillover: 0.12
+    };
+    
+    setQualityMetrics(metrics);
+  }, []);
 
   // Initialize with sample data
   useEffect(() => {
@@ -328,21 +342,6 @@ const PETCTFusion: React.FC = () => {
     setRegistrationStatus('completed');
     calculateQualityMetrics();
   }, [study, calculateQualityMetrics]);
-
-  const calculateQualityMetrics = useCallback(() => {
-    // Simulate quality metrics calculation
-    const metrics: FusionQualityMetrics = {
-      spatialAlignment: 0.92,
-      temporalAlignment: 0.88,
-      contrastToNoise: 15.2,
-      signalToNoise: 28.5,
-      uniformity: 0.85,
-      recovery: 0.78,
-      spillover: 0.12
-    };
-    
-    setQualityMetrics(metrics);
-  }, []);
 
   // ROI Management
   const addROI = useCallback((type: ROIData['type'], coordinates: number[]) => {
@@ -556,7 +555,7 @@ const PETCTFusion: React.FC = () => {
         <Typography variant="h6" gutterBottom>Fusion Controls</Typography>
         
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Typography gutterBottom>PET Opacity</Typography>
             <Slider
               value={fusionSettings.petOpacity}
@@ -568,7 +567,7 @@ const PETCTFusion: React.FC = () => {
             />
           </Grid>
           
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Typography gutterBottom>CT Opacity</Typography>
             <Slider
               value={fusionSettings.ctOpacity}
@@ -580,12 +579,12 @@ const PETCTFusion: React.FC = () => {
             />
           </Grid>
           
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <FormControl fullWidth>
               <InputLabel>Colormap</InputLabel>
               <Select
                 value={fusionSettings.colormap}
-                onChange={(e: ChangeEvent<{ value: unknown }>) => setFusionSettings(prev => ({ ...prev, colormap: e.target.value as string }))}
+                onChange={(e) => setFusionSettings(prev => ({ ...prev, colormap: e.target.value as string }))}
               >
                 <MenuItem value="hot">Hot</MenuItem>
                 <MenuItem value="jet">Jet</MenuItem>
@@ -597,12 +596,12 @@ const PETCTFusion: React.FC = () => {
             </FormControl>
           </Grid>
           
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <FormControl fullWidth>
               <InputLabel>Blend Mode</InputLabel>
               <Select
                 value={fusionSettings.blendMode}
-                onChange={(e: ChangeEvent<{ value: unknown }>) => setFusionSettings(prev => ({ ...prev, blendMode: e.target.value as 'overlay' | 'multiply' | 'screen' | 'difference' }))}
+                onChange={(e) => setFusionSettings(prev => ({ ...prev, blendMode: e.target.value as 'overlay' | 'multiply' | 'screen' | 'difference' }))}
               >
                 <MenuItem value="overlay">Overlay</MenuItem>
                 <MenuItem value="multiply">Multiply</MenuItem>
@@ -612,7 +611,7 @@ const PETCTFusion: React.FC = () => {
             </FormControl>
           </Grid>
           
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Typography gutterBottom>PET Threshold (SUV)</Typography>
             <Slider
               value={fusionSettings.petThreshold}
@@ -624,7 +623,7 @@ const PETCTFusion: React.FC = () => {
             />
           </Grid>
           
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Typography gutterBottom>Window Level</Typography>
             <Slider
               value={fusionSettings.windowLevel}
@@ -636,7 +635,7 @@ const PETCTFusion: React.FC = () => {
             />
           </Grid>
           
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <FormControlLabel
               control={
                 <Switch
@@ -676,12 +675,12 @@ const PETCTFusion: React.FC = () => {
         <Typography variant="h6" gutterBottom>Image Registration</Typography>
         
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <FormControl fullWidth>
               <InputLabel>Registration Method</InputLabel>
               <Select
                 value={fusionSettings.registrationMethod}
-                onChange={(e: ChangeEvent<{ value: unknown }>) => setFusionSettings(prev => ({ ...prev, registrationMethod: e.target.value as 'rigid' | 'affine' | 'deformable' | 'manual' }))}
+                onChange={(e) => setFusionSettings(prev => ({ ...prev, registrationMethod: e.target.value as 'rigid' | 'affine' | 'deformable' | 'manual' }))}
               >
                 <MenuItem value="rigid">Rigid</MenuItem>
                 <MenuItem value="affine">Affine</MenuItem>
@@ -691,12 +690,12 @@ const PETCTFusion: React.FC = () => {
             </FormControl>
           </Grid>
           
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <FormControl fullWidth>
               <InputLabel>Interpolation</InputLabel>
               <Select
                 value={fusionSettings.interpolation}
-                onChange={(e: ChangeEvent<{ value: unknown }>) => setFusionSettings(prev => ({ ...prev, interpolation: e.target.value as 'nearest' | 'linear' | 'cubic' }))}
+                onChange={(e) => setFusionSettings(prev => ({ ...prev, interpolation: e.target.value as 'nearest' | 'linear' | 'cubic' }))}
               >
                 <MenuItem value="nearest">Nearest Neighbor</MenuItem>
                 <MenuItem value="linear">Linear</MenuItem>
@@ -705,7 +704,7 @@ const PETCTFusion: React.FC = () => {
             </FormControl>
           </Grid>
           
-          <Grid item xs={12}>
+          <Grid size={{ xs: 12 }}>
             <Button
               variant="contained"
               onClick={performRegistration}
@@ -773,7 +772,7 @@ const PETCTFusion: React.FC = () => {
             </TableHead>
             <TableBody>
               {study?.roi.map((roi) => (
-                <TableRow key={roi.id} selected={selectedROI === roi.id}>
+                <TableRow key={roi.id} selected={false}>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Box
@@ -826,7 +825,7 @@ const PETCTFusion: React.FC = () => {
         
         {study && (
           <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="subtitle2" gutterBottom>Patient Information</Typography>
               <TextField
                 label="Patient Weight (kg)"
@@ -863,7 +862,7 @@ const PETCTFusion: React.FC = () => {
               />
             </Grid>
             
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="subtitle2" gutterBottom>SUV Metrics</Typography>
               <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                 <Paper sx={{ p: 2, textAlign: 'center' }}>
@@ -902,7 +901,7 @@ const PETCTFusion: React.FC = () => {
         
         {qualityMetrics && (
           <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Spatial Alignment</Typography>
               <LinearProgress
                 variant="determinate"
@@ -912,7 +911,7 @@ const PETCTFusion: React.FC = () => {
               <Typography variant="caption">{(qualityMetrics.spatialAlignment * 100).toFixed(1)}%</Typography>
             </Grid>
             
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Temporal Alignment</Typography>
               <LinearProgress
                 variant="determinate"
@@ -922,27 +921,27 @@ const PETCTFusion: React.FC = () => {
               <Typography variant="caption">{(qualityMetrics.temporalAlignment * 100).toFixed(1)}%</Typography>
             </Grid>
             
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Contrast to Noise Ratio</Typography>
               <Typography variant="h6">{qualityMetrics.contrastToNoise.toFixed(1)}</Typography>
             </Grid>
             
-            <Grid item xs={12} md={6}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography gutterBottom>Signal to Noise Ratio</Typography>
               <Typography variant="h6">{qualityMetrics.signalToNoise.toFixed(1)}</Typography>
             </Grid>
             
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Typography gutterBottom>Uniformity</Typography>
               <Typography variant="h6">{(qualityMetrics.uniformity * 100).toFixed(1)}%</Typography>
             </Grid>
             
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Typography gutterBottom>Recovery</Typography>
               <Typography variant="h6">{(qualityMetrics.recovery * 100).toFixed(1)}%</Typography>
             </Grid>
             
-            <Grid item xs={12} md={4}>
+            <Grid size={{ xs: 12, md: 4 }}>
               <Typography gutterBottom>Spillover</Typography>
               <Typography variant="h6">{(qualityMetrics.spillover * 100).toFixed(1)}%</Typography>
             </Grid>
@@ -976,11 +975,11 @@ const PETCTFusion: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={8}>
+        <Grid size={{ xs: 12, lg: 8 }}>
           {renderViewer()}
         </Grid>
         
-        <Grid item xs={12} lg={4}>
+        <Grid size={{ xs: 12, lg: 4 }}>
           <Tabs value={activeTab} onChange={(_: SyntheticEvent, value: number) => setActiveTab(value)}>
             <Tab label="Fusion" />
             <Tab label="Registration" />
