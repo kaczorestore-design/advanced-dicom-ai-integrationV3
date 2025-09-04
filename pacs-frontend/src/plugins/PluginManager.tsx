@@ -1,5 +1,67 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
+interface DICOMStudy {
+  studyInstanceUID: string;
+  studyDate: string;
+  studyTime: string;
+  patientName: string;
+  patientID: string;
+  modality: string;
+  numberOfSeries: number;
+}
+
+interface DICOMSeries {
+  seriesInstanceUID: string;
+  seriesNumber: number;
+  modality: string;
+  seriesDescription: string;
+  numberOfImages: number;
+}
+
+interface DICOMImage {
+  imageId: string;
+  instanceNumber: number;
+  rows: number;
+  columns: number;
+  pixelSpacing: number[];
+  imagePosition: number[];
+  imageOrientation: number[];
+}
+
+interface ViewportData {
+  imageIds: string[];
+  currentImageIndex: number;
+  viewport: {
+    scale: number;
+    translation: { x: number; y: number };
+    rotation: number;
+    windowWidth: number;
+    windowCenter: number;
+  };
+}
+
+interface Overlay {
+  id: string;
+  type: 'annotation' | 'measurement' | 'roi';
+  coordinates: number[][];
+  style: {
+    color: string;
+    lineWidth: number;
+    fillOpacity?: number;
+  };
+  metadata?: Record<string, unknown>;
+}
+
+interface Measurement {
+  id: string;
+  type: 'length' | 'area' | 'angle' | 'volume';
+  value: number;
+  unit: string;
+  coordinates: number[][];
+  imageId: string;
+  metadata?: Record<string, unknown>;
+}
+
 // Plugin system interfaces
 interface PluginManifest {
   id: string;
@@ -46,7 +108,7 @@ interface Plugin {
   manifest: PluginManifest;
   status: 'installed' | 'enabled' | 'disabled' | 'error' | 'updating';
   instance?: PluginInstance;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   installedAt: string;
   lastUpdated: string;
   size: number;
@@ -59,12 +121,12 @@ interface PluginInstance {
   deactivate: () => Promise<void>;
   destroy: () => Promise<void>;
   getInfo: () => PluginInfo;
-  onConfigChange?: (config: Record<string, any>) => void;
+  onConfigChange?: (config: Record<string, unknown>) => void;
 }
 
 interface PluginContext {
   api: PluginAPI;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   storage: PluginStorage;
   events: PluginEventEmitter;
   ui: PluginUIManager;
@@ -73,45 +135,45 @@ interface PluginContext {
 interface PluginAPI {
   // DICOM operations
   dicom: {
-    getCurrentStudy: () => any;
-    getCurrentSeries: () => any;
-    getCurrentImage: () => any;
-    loadStudy: (studyInstanceUID: string) => Promise<any>;
-    loadSeries: (seriesInstanceUID: string) => Promise<any>;
+    getCurrentStudy: () => DICOMStudy | null;
+    getCurrentSeries: () => DICOMSeries | null;
+    getCurrentImage: () => DICOMImage | null;
+    loadStudy: (studyInstanceUID: string) => Promise<DICOMStudy>;
+    loadSeries: (seriesInstanceUID: string) => Promise<DICOMSeries>;
     getPixelData: (imageId: string) => Promise<ArrayBuffer>;
-    getMetadata: (imageId: string) => any;
+    getMetadata: (imageId: string) => Record<string, unknown>;
   };
   
   // Viewer operations
   viewer: {
-    getActiveViewport: () => any;
-    getAllViewports: () => any[];
-    setViewportData: (viewportId: string, data: any) => void;
-    addOverlay: (viewportId: string, overlay: any) => string;
+    getActiveViewport: () => ViewportData | null;
+    getAllViewports: () => ViewportData[];
+    setViewportData: (viewportId: string, data: ViewportData) => void;
+    addOverlay: (viewportId: string, overlay: Overlay) => string;
     removeOverlay: (viewportId: string, overlayId: string) => void;
     captureViewport: (viewportId: string) => Promise<Blob>;
   };
   
   // Measurement operations
   measurements: {
-    create: (measurement: any) => Promise<string>;
-    update: (id: string, measurement: any) => Promise<void>;
+    create: (measurement: Measurement) => Promise<string>;
+    update: (id: string, measurement: Partial<Measurement>) => Promise<void>;
     delete: (id: string) => Promise<void>;
-    getAll: () => Promise<any[]>;
-    getByStudy: (studyInstanceUID: string) => Promise<any[]>;
+    getAll: () => Promise<Measurement[]>;
+    getByStudy: (studyInstanceUID: string) => Promise<Measurement[]>;
   };
   
   // Network operations
   network: {
     request: (url: string, options?: RequestInit) => Promise<Response>;
-    upload: (file: File, endpoint: string) => Promise<any>;
+    upload: (file: File, endpoint: string) => Promise<{ success: boolean; url?: string; error?: string }>;
     download: (url: string, filename: string) => Promise<void>;
   };
   
   // Utility functions
   utils: {
     showNotification: (message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
-    showDialog: (content: React.ReactNode, options?: any) => Promise<any>;
+    showDialog: (content: React.ReactNode, options?: Record<string, unknown>) => Promise<boolean | string>;
     formatDate: (date: Date | string) => string;
     formatFileSize: (bytes: number) => string;
     generateId: () => string;
@@ -119,18 +181,18 @@ interface PluginAPI {
 }
 
 interface PluginStorage {
-  get: (key: string) => Promise<any>;
-  set: (key: string, value: any) => Promise<void>;
+  get: (key: string) => Promise<unknown>;
+  set: (key: string, value: unknown) => Promise<void>;
   remove: (key: string) => Promise<void>;
   clear: () => Promise<void>;
   keys: () => Promise<string[]>;
 }
 
 interface PluginEventEmitter {
-  on: (event: string, listener: Function) => void;
-  off: (event: string, listener: Function) => void;
-  emit: (event: string, ...args: any[]) => void;
-  once: (event: string, listener: Function) => void;
+  on: (event: string, listener: (...args: unknown[]) => void) => void;
+  off: (event: string, listener: (...args: unknown[]) => void) => void;
+  emit: (event: string, ...args: unknown[]) => void;
+  once: (event: string, listener: (...args: unknown[]) => void) => void;
 }
 
 interface PluginUIManager {
@@ -140,7 +202,7 @@ interface PluginUIManager {
   removeToolbarButton: (id: string) => void;
   addPanel: (panel: PluginPanel) => string;
   removePanel: (id: string) => void;
-  showModal: (content: React.ReactNode, options?: any) => Promise<any>;
+  showModal: (content: React.ReactNode, options?: Record<string, unknown>) => Promise<boolean | string>;
 }
 
 interface PluginMenuItem {
@@ -218,8 +280,8 @@ interface PluginManagerContextType {
   enablePlugin: (pluginId: string) => Promise<void>;
   disablePlugin: (pluginId: string) => Promise<void>;
   updatePlugin: (pluginId: string) => Promise<void>;
-  configurePlugin: (pluginId: string, config: Record<string, any>) => Promise<void>;
-  searchMarketplace: (query: string, filters?: any) => Promise<PluginMarketplaceItem[]>;
+  configurePlugin: (pluginId: string, config: Record<string, unknown>) => Promise<void>;
+  searchMarketplace: (query: string, filters?: Record<string, unknown>) => Promise<PluginMarketplaceItem[]>;
   addRepository: (repository: Omit<PluginRepository, 'id'>) => Promise<void>;
   removeRepository: (repositoryId: string) => Promise<void>;
 }
@@ -251,37 +313,51 @@ class PluginManagerService {
     return {
       api: {
         dicom: {
-          getCurrentStudy: () => ({}), // Implement actual DICOM API
-          getCurrentSeries: () => ({}),
-          getCurrentImage: () => ({}),
-          loadStudy: async (_studyInstanceUID: string) => ({}),
-          loadSeries: async (_seriesInstanceUID: string) => ({}),
+          getCurrentStudy: () => null,
+          getCurrentSeries: () => null,
+          getCurrentImage: () => null,
+          loadStudy: async (_studyInstanceUID: string) => ({
+            studyInstanceUID: _studyInstanceUID,
+            studyDate: '',
+            studyTime: '',
+            patientName: '',
+            patientID: '',
+            modality: '',
+            numberOfSeries: 0
+          }),
+          loadSeries: async (_seriesInstanceUID: string) => ({
+            seriesInstanceUID: _seriesInstanceUID,
+            seriesNumber: 0,
+            modality: '',
+            seriesDescription: '',
+            numberOfImages: 0
+          }),
           getPixelData: async (_imageId: string) => new ArrayBuffer(0),
           getMetadata: (_imageId: string) => ({})
         },
         viewer: {
-          getActiveViewport: () => ({}),
+          getActiveViewport: () => null,
           getAllViewports: () => [],
-          setViewportData: (_viewportId: string, _data: any) => {},
-          addOverlay: (_viewportId: string, _overlay: any) => '',
+          setViewportData: (_viewportId: string, _data: ViewportData) => {},
+          addOverlay: (_viewportId: string, _overlay: Overlay) => '',
           removeOverlay: (_viewportId: string, _overlayId: string) => {},
           captureViewport: async (_viewportId: string) => new Blob()
         },
         measurements: {
-          create: async (_measurement: any) => '',
-          update: async (_id: string, _measurement: any) => {},
+          create: async (_measurement: Measurement) => '',
+          update: async (_id: string, _measurement: Partial<Measurement>) => {},
           delete: async (_id: string) => {},
           getAll: async () => [],
           getByStudy: async (_studyInstanceUID: string) => []
         },
         network: {
           request: async (_url: string, _options?: RequestInit) => new Response(),
-          upload: async (_file: File, _endpoint: string) => ({}),
+          upload: async (_file: File, _endpoint: string) => ({ success: false, error: 'Not implemented' }),
           download: async (_url: string, _filename: string) => {}
         },
         utils: {
           showNotification: (_message: string, _type: 'info' | 'success' | 'warning' | 'error') => {},
-          showDialog: async (_content: React.ReactNode, _options?: any) => ({}),
+          showDialog: async (_content: React.ReactNode, _options?: Record<string, unknown>) => false,
           formatDate: (date: Date | string) => new Date(date).toLocaleDateString(),
           formatFileSize: (bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`,
           generateId: () => Math.random().toString(36).substr(2, 9)
@@ -290,7 +366,7 @@ class PluginManagerService {
       config: {},
       storage: {
         get: async (key: string) => JSON.parse(localStorage.getItem(`plugin_${key}`) || 'null'),
-        set: async (key: string, value: any) => localStorage.setItem(`plugin_${key}`, JSON.stringify(value)),
+        set: async (key: string, value: unknown) => localStorage.setItem(`plugin_${key}`, JSON.stringify(value)),
         remove: async (key: string) => localStorage.removeItem(`plugin_${key}`),
         clear: async () => {
           Object.keys(localStorage).forEach(key => {
@@ -314,7 +390,7 @@ class PluginManagerService {
         removeToolbarButton: (_id: string) => {},
         addPanel: (_panel: PluginPanel) => '',
         removePanel: (_id: string) => {},
-        showModal: async (_content: React.ReactNode, _options?: any) => ({})
+        showModal: async (_content: React.ReactNode, _options?: Record<string, unknown>) => false
       }
     };
   }
@@ -498,7 +574,7 @@ class PluginManagerService {
     }
   }
 
-  async configurePlugin(pluginId: string, config: Record<string, any>): Promise<void> {
+  async configurePlugin(pluginId: string, config: Record<string, unknown>): Promise<void> {
     const plugin = this.plugins.get(pluginId);
     if (!plugin) {
       throw new Error('Plugin not found');
@@ -514,7 +590,7 @@ class PluginManagerService {
     this.eventEmitter.dispatchEvent(new CustomEvent('pluginConfigured', { detail: { pluginId, config } }));
   }
 
-  async searchMarketplace(query: string, filters?: any): Promise<PluginMarketplaceItem[]> {
+  async searchMarketplace(query: string, filters?: Record<string, unknown>): Promise<PluginMarketplaceItem[]> {
     const results: PluginMarketplaceItem[] = [];
 
     for (const repo of this.repositories.filter(r => r.enabled)) {
@@ -571,9 +647,9 @@ class PluginManagerService {
     // Create a sandboxed environment for the plugin
     const sandbox = {
       console: {
-        log: (...args: any[]) => console.log(`[${manifest.id}]`, ...args),
-        error: (...args: any[]) => console.error(`[${manifest.id}]`, ...args),
-        warn: (...args: any[]) => console.warn(`[${manifest.id}]`, ...args)
+        log: (...args: unknown[]) => console.log(`[${manifest.id}]`, ...args),
+        error: (...args: unknown[]) => console.error(`[${manifest.id}]`, ...args),
+        warn: (...args: unknown[]) => console.warn(`[${manifest.id}]`, ...args)
       },
       setTimeout,
       clearTimeout,
@@ -723,7 +799,7 @@ export const PluginManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [pluginManager]);
 
-  const configurePlugin = useCallback(async (pluginId: string, config: Record<string, any>) => {
+  const configurePlugin = useCallback(async (pluginId: string, config: Record<string, unknown>) => {
     setError(null);
     try {
       await pluginManager.configurePlugin(pluginId, config);
@@ -733,7 +809,7 @@ export const PluginManagerProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [pluginManager]);
 
-  const searchMarketplace = useCallback(async (query: string, filters?: any) => {
+  const searchMarketplace = useCallback(async (query: string, filters?: Record<string, unknown>) => {
     return pluginManager.searchMarketplace(query, filters);
   }, [pluginManager]);
 

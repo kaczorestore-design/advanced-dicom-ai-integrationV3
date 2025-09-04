@@ -672,9 +672,18 @@ const PluginManagerUI: React.FC<PluginManagerUIProps> = ({ isOpen, onClose }) =>
 };
 
 // Plugin Configuration Form Component
+interface ConfigField {
+  type: 'string' | 'number' | 'boolean' | 'textarea';
+  title: string;
+  description?: string;
+  default?: unknown;
+  required?: boolean;
+  enum?: string[];
+}
+
 interface PluginConfigurationFormProps {
   plugin: Plugin;
-  onSave: (config: Record<string, any>) => void;
+  onSave: (config: Record<string, unknown>) => void;
   onCancel: () => void;
 }
 
@@ -696,18 +705,18 @@ const PluginConfigurationForm: React.FC<PluginConfigurationFormProps> = ({
     setExpandedSections(newExpanded);
   };
 
-  const updateConfig = (key: string, value: any) => {
+  const updateConfig = (key: string, value: unknown) => {
     setConfig(prev => ({ ...prev, [key]: value }));
   };
 
-  const renderConfigField = (key: string, field: any) => {
+  const renderConfigField = (key: string, field: ConfigField) => {
     const value = config[key] ?? field.default;
 
     switch (field.type) {
       case 'string':
         if (field.enum) {
           return (
-            <Select value={value} onValueChange={(val) => updateConfig(key, val)}>
+            <Select value={String(value || '')} onValueChange={(val) => updateConfig(key, val)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -732,15 +741,15 @@ const PluginConfigurationForm: React.FC<PluginConfigurationFormProps> = ({
         return (
           <Input
             type="number"
-            value={value || ''}
+            value={String(value || '')}
             onChange={(e) => updateConfig(key, parseFloat(e.target.value))}
-            placeholder={field.description}
+            placeholder={field.description || ''}
           />
         );
       case 'boolean':
         return (
           <Switch
-            checked={value || false}
+            checked={Boolean(value)}
             onCheckedChange={(checked) => updateConfig(key, checked)}
           />
         );

@@ -1,10 +1,104 @@
 // VTK.js type declarations
+interface VTKRenderer {
+  addActor(actor: VTKActor): void;
+  removeActor(actor: VTKActor): void;
+  setBackground(r: number, g: number, b: number): void;
+  resetCamera(): void;
+  getActiveCamera(): VTKCamera;
+  addVolume(volume: VTKVolume): void;
+  removeVolume(volume: VTKVolume): void;
+}
+
+interface VTKRenderWindow {
+  addRenderer(renderer: VTKRenderer): void;
+  removeRenderer(renderer: VTKRenderer): void;
+  render(): void;
+  getInteractor(): VTKRenderWindowInteractor;
+  setInteractor(interactor: VTKRenderWindowInteractor): void;
+}
+
+interface VTKRenderWindowInteractor {
+  setView(view: VTKRenderWindow): void;
+  initialize(): void;
+  bindEvents(container: HTMLElement): void;
+  unbindEvents(): void;
+  start(): void;
+  setInteractorStyle(style: VTKInteractorStyle): void;
+}
+
+interface VTKActor {
+  setMapper(mapper: VTKMapper): void;
+}
+
+interface VTKMapper {
+  setInputConnection(connection: VTKOutputPort): void;
+}
+
+interface VTKVolume {
+  setMapper(mapper: VTKVolumeMapper): void;
+  getProperty(): VTKVolumeProperty;
+}
+
+interface VTKVolumeMapper {
+  setInputData(data: VTKImageData): void;
+  setSampleDistance(distance: number): void;
+}
+
+interface VTKVolumeProperty {
+  setScalarOpacity(opacity: VTKPiecewiseFunction): void;
+  setColor(color: VTKColorTransferFunction): void;
+  setInterpolationTypeToLinear(): void;
+  setShade(shade: boolean): void;
+}
+
+interface VTKImageData {
+  setDimensions(dimensions: number[]): void;
+  setSpacing(spacing: number[]): void;
+  setOrigin(origin: number[]): void;
+  getPointData(): VTKPointData;
+  getDimensions(): number[];
+  getSpacing(): number[];
+  getOrigin(): number[];
+}
+
+interface VTKPointData {
+  setScalars(scalars: VTKDataArray): void;
+}
+
+interface VTKDataArray {
+  setData(data: ArrayLike<number>): void;
+}
+
+interface VTKPiecewiseFunction {
+  addPoint(x: number, y: number): void;
+  removeAllPoints(): void;
+}
+
+interface VTKColorTransferFunction {
+  addRGBPoint(x: number, r: number, g: number, b: number): void;
+  removeAllPoints(): void;
+}
+
+interface VTKOutputPort {
+  getOutputData(): VTKImageData;
+}
+
+interface VTKCamera {
+  setPosition(x: number, y: number, z: number): void;
+  setFocalPoint(x: number, y: number, z: number): void;
+  setViewUp(x: number, y: number, z: number): void;
+}
+
+interface VTKInteractorStyle {
+  setInteractor(interactor: VTKRenderWindowInteractor): void;
+}
+
 declare module '@kitware/vtk.js/Rendering/Misc/FullScreenRenderWindow' {
   export interface vtkFullScreenRenderWindow {
-    newInstance(options?: any): any;
-    getRenderer(): any;
-    getRenderWindow(): any;
-    getInteractor(): any;
+    newInstance(options?: Record<string, unknown>): vtkFullScreenRenderWindow;
+    getRenderer(): VTKRenderer;
+    getRenderWindow(): VTKRenderWindow;
+    getInteractor(): VTKRenderWindowInteractor;
     resize(): void;
     delete(): void;
     getContainer(): HTMLElement;
@@ -16,7 +110,7 @@ declare module '@kitware/vtk.js/Rendering/Misc/FullScreenRenderWindow' {
 
 declare module '@kitware/vtk.js/Rendering/Core/Actor' {
   interface Actor {
-    setMapper(mapper: any): void;
+    setMapper(mapper: VTKMapper): void;
   }
   
   interface ActorStatic {
@@ -29,7 +123,7 @@ declare module '@kitware/vtk.js/Rendering/Core/Actor' {
 
 declare module '@kitware/vtk.js/Rendering/Core/Mapper' {
   interface Mapper {
-    setInputConnection(connection: any): void;
+    setInputConnection(connection: VTKOutputPort): void;
   }
   
   interface MapperStatic {
@@ -42,7 +136,7 @@ declare module '@kitware/vtk.js/Rendering/Core/Mapper' {
 
 declare module '@kitware/vtk.js/Filters/Sources/ConeSource' {
   interface ConeSource {
-    getOutputPort(): any;
+    getOutputPort(): VTKOutputPort;
   }
   
   interface ConeSourceStatic {
@@ -55,12 +149,12 @@ declare module '@kitware/vtk.js/Filters/Sources/ConeSource' {
 
 declare module '@kitware/vtk.js/Rendering/Core/RenderWindow' {
   export interface vtkRenderWindow {
-    newInstance(): any;
-    addRenderer(renderer: any): void;
-    removeRenderer(renderer: any): void;
+    newInstance(): VTKRenderWindow;
+    addRenderer(renderer: VTKRenderer): void;
+    removeRenderer(renderer: VTKRenderer): void;
     render(): void;
-    getInteractor(): any;
-    setInteractor(interactor: any): void;
+    getInteractor(): VTKRenderWindowInteractor;
+    setInteractor(interactor: VTKRenderWindowInteractor): void;
   }
   const vtkRenderWindow: vtkRenderWindow;
   export default vtkRenderWindow;
@@ -68,14 +162,14 @@ declare module '@kitware/vtk.js/Rendering/Core/RenderWindow' {
 
 declare module '@kitware/vtk.js/Rendering/Core/Renderer' {
   export interface vtkRenderer {
-    newInstance(): any;
-    addActor(actor: any): void;
-    removeActor(actor: any): void;
+    newInstance(): VTKRenderer;
+    addActor(actor: VTKActor): void;
+    removeActor(actor: VTKActor): void;
     setBackground(r: number, g: number, b: number): void;
     resetCamera(): void;
-    getActiveCamera(): any;
-    addVolume(volume: any): void;
-    removeVolume(volume: any): void;
+    getActiveCamera(): VTKCamera;
+    addVolume(volume: VTKVolume): void;
+    removeVolume(volume: VTKVolume): void;
   }
   const vtkRenderer: vtkRenderer;
   export default vtkRenderer;
@@ -83,13 +177,13 @@ declare module '@kitware/vtk.js/Rendering/Core/Renderer' {
 
 declare module '@kitware/vtk.js/Rendering/Core/RenderWindowInteractor' {
   export interface vtkRenderWindowInteractor {
-    newInstance(): any;
-    setView(view: any): void;
+    newInstance(): VTKRenderWindowInteractor;
+    setView(view: VTKRenderWindow): void;
     initialize(): void;
     bindEvents(container: HTMLElement): void;
     unbindEvents(): void;
     start(): void;
-    setInteractorStyle(style: any): void;
+    setInteractorStyle(style: VTKInteractorStyle): void;
   }
   const vtkRenderWindowInteractor: vtkRenderWindowInteractor;
   export default vtkRenderWindowInteractor;
@@ -97,11 +191,11 @@ declare module '@kitware/vtk.js/Rendering/Core/RenderWindowInteractor' {
 
 declare module '@kitware/vtk.js/Common/DataModel/ImageData' {
   export interface vtkImageData {
-    newInstance(): any;
+    newInstance(): VTKImageData;
     setDimensions(dimensions: number[]): void;
     setSpacing(spacing: number[]): void;
     setOrigin(origin: number[]): void;
-    getPointData(): any;
+    getPointData(): VTKPointData;
     getDimensions(): number[];
     getSpacing(): number[];
     getOrigin(): number[];
@@ -112,7 +206,7 @@ declare module '@kitware/vtk.js/Common/DataModel/ImageData' {
 
 declare module '@kitware/vtk.js/Common/Core/DataArray' {
   export interface vtkDataArray {
-    newInstance(options: any): any;
+    newInstance(options: Record<string, unknown>): VTKDataArray;
   }
   const vtkDataArray: vtkDataArray;
   export default vtkDataArray;
@@ -120,9 +214,9 @@ declare module '@kitware/vtk.js/Common/Core/DataArray' {
 
 declare module '@kitware/vtk.js/Rendering/Core/Volume' {
   export interface vtkVolume {
-    newInstance(): any;
-    setMapper(mapper: any): void;
-    getProperty(): any;
+    newInstance(): VTKVolume;
+    setMapper(mapper: VTKVolumeMapper): void;
+    getProperty(): VTKVolumeProperty;
   }
   const vtkVolume: vtkVolume;
   export default vtkVolume;
@@ -130,8 +224,8 @@ declare module '@kitware/vtk.js/Rendering/Core/Volume' {
 
 declare module '@kitware/vtk.js/Rendering/Core/VolumeMapper' {
   export interface vtkVolumeMapper {
-    newInstance(): any;
-    setInputData(data: any): void;
+    newInstance(): VTKVolumeMapper;
+    setInputData(data: VTKImageData): void;
     setSampleDistance(distance: number): void;
   }
   const vtkVolumeMapper: vtkVolumeMapper;
@@ -140,9 +234,9 @@ declare module '@kitware/vtk.js/Rendering/Core/VolumeMapper' {
 
 declare module '@kitware/vtk.js/Rendering/Core/VolumeProperty' {
   export interface vtkVolumeProperty {
-    newInstance(): any;
-    setScalarOpacity(opacity: any): void;
-    setColor(color: any): void;
+    newInstance(): VTKVolumeProperty;
+    setScalarOpacity(opacity: VTKPiecewiseFunction): void;
+    setColor(color: VTKColorTransferFunction): void;
     setInterpolationTypeToLinear(): void;
     setShade(shade: boolean): void;
   }
@@ -152,7 +246,7 @@ declare module '@kitware/vtk.js/Rendering/Core/VolumeProperty' {
 
 declare module '@kitware/vtk.js/Common/DataModel/PiecewiseFunction' {
   export interface vtkPiecewiseFunction {
-    newInstance(): any;
+    newInstance(): VTKPiecewiseFunction;
     addPoint(x: number, y: number): void;
     removeAllPoints(): void;
   }
@@ -162,7 +256,7 @@ declare module '@kitware/vtk.js/Common/DataModel/PiecewiseFunction' {
 
 declare module '@kitware/vtk.js/Common/Core/ColorTransferFunction' {
   export interface vtkColorTransferFunction {
-    newInstance(): any;
+    newInstance(): VTKColorTransferFunction;
     addRGBPoint(x: number, r: number, g: number, b: number): void;
     removeAllPoints(): void;
   }
@@ -172,27 +266,41 @@ declare module '@kitware/vtk.js/Common/Core/ColorTransferFunction' {
 
 // DICOM-specific VTK modules
 declare module '@kitware/vtk.js/IO/Core/DataAccessHelper/HttpDataAccessHelper' {
-  const HttpDataAccessHelper: any;
+  interface HttpDataAccessHelper {
+    fetchBinary(url: string): Promise<ArrayBuffer>;
+    fetchText(url: string): Promise<string>;
+  }
+  const HttpDataAccessHelper: HttpDataAccessHelper;
   export default HttpDataAccessHelper;
 }
 
 declare module '@kitware/vtk.js/IO/Geometry/STLReader' {
-  const STLReader: any;
+  interface STLReader {
+    setUrl(url: string): void;
+    parseAsArrayBuffer(arrayBuffer: ArrayBuffer): void;
+    getOutputData(): VTKImageData;
+  }
+  const STLReader: STLReader;
   export default STLReader;
 }
 
 declare module '@kitware/vtk.js/Filters/General/ImageMarchingCubes' {
-  const ImageMarchingCubes: any;
+  interface ImageMarchingCubes {
+    setInputData(data: VTKImageData): void;
+    setContourValue(value: number): void;
+    getOutputData(): VTKImageData;
+  }
+  const ImageMarchingCubes: ImageMarchingCubes;
   export default ImageMarchingCubes;
 }
 
 // Global VTK types
 declare global {
   interface Window {
-    vtkRenderer?: any;
-    vtkRenderWindow?: any;
-    vtkRenderWindowInteractor?: any;
-    vtkFullScreenRenderWindow?: any;
+    vtkRenderer?: VTKRenderer;
+    vtkRenderWindow?: VTKRenderWindow;
+    vtkRenderWindowInteractor?: VTKRenderWindowInteractor;
+    vtkFullScreenRenderWindow?: vtkFullScreenRenderWindow;
   }
 }
 

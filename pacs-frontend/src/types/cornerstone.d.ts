@@ -50,12 +50,24 @@ declare module 'cornerstone-core' {
   export function renderGrayscaleImage(enabledElement: EnabledElement, invalidated: boolean): void;
 }
 
+interface AnalysisData {
+  pixelData: ArrayLike<number>;
+  coordinates: number[][];
+  metadata?: Record<string, unknown>;
+}
+
+interface AnalysisResult {
+  features: Record<string, number>;
+  confidence: number;
+  findings: string[];
+}
+
 declare module 'cornerstone-tools' {
   interface Tool {
     name: string;
-    analyzeRegion?: (data: any, element: HTMLElement) => Promise<any>;
-    analyzeTexture?: (data: any, element: HTMLElement) => Promise<any>;
-    analyzeMorphology?: (data: any, element: HTMLElement) => Promise<any>;
+    analyzeRegion?: (data: AnalysisData, element: HTMLElement) => Promise<AnalysisResult>;
+    analyzeTexture?: (data: AnalysisData, element: HTMLElement) => Promise<AnalysisResult>;
+    analyzeMorphology?: (data: AnalysisData, element: HTMLElement) => Promise<AnalysisResult>;
   }
 
   const LengthTool: Tool;
@@ -78,7 +90,7 @@ declare module 'cornerstone-tools' {
   function setToolActive(toolName: string, options?: Record<string, unknown>): void;
   function setToolPassive(toolName: string): void;
   function getToolForElement(element: HTMLElement, toolName: string): Tool | undefined;
-  function addToolState(element: HTMLElement, toolName: string, data: any): void;
+  function addToolState(element: HTMLElement, toolName: string, data: AnalysisData): void;
 
   export {
     Tool,
