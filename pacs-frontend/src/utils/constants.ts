@@ -1,0 +1,37 @@
+export const DICOM_CONSTANTS = {
+  TRANSFER_SYNTAXES: {
+    IMPLICIT_VR_LITTLE_ENDIAN: '1.2.840.10008.1.2',
+    EXPLICIT_VR_LITTLE_ENDIAN: '1.2.840.10008.1.2.1',
+    EXPLICIT_VR_BIG_ENDIAN: '1.2.840.10008.1.2.2',
+    JPEG_BASELINE: '1.2.840.10008.1.2.4.50',
+    JPEG_LOSSLESS: '1.2.840.10008.1.2.4.57'
+  },
+  SOP_CLASSES: {
+    CT_IMAGE_STORAGE: '1.2.840.10008.5.1.4.1.1.2',
+    MR_IMAGE_STORAGE: '1.2.840.10008.5.1.4.1.1.4',
+    US_IMAGE_STORAGE: '1.2.840.10008.5.1.4.1.1.6.1'
+  }
+};
+
+export const UI_CONSTANTS = {
+  THEMES: ['light', 'dark', 'system'] as const,
+  BREAKPOINTS: {
+    sm: 640,
+    md: 768,
+    lg: 1024,
+    xl: 1280
+  }
+};
+
+export const PERFORMANCE_CONSTANTS = {
+  MEMORY_THRESHOLDS: {
+    LOW: 0.5,
+    MEDIUM: 0.7,
+    HIGH: 0.9
+  },
+  CACHE_SIZES: {
+    DEFAULT: 100,
+    LARGE: 500,
+    XLARGE: 1000
+  }
+};

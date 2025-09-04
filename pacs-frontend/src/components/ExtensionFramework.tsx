@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+// import React from 'react';
 import { EventEmitter } from 'events';
 
 export interface Extension {
@@ -93,12 +93,12 @@ export interface ExtensionPermission {
 }
 
 export interface ExtensionConfig {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ExtensionConfigSchema {
   type: 'object';
-  properties: { [key: string]: any };
+  properties: { [key: string]: unknown };
   required?: string[];
   additionalProperties?: boolean;
 }
@@ -138,14 +138,14 @@ export interface ExtensionHookConfig {
 export interface ExtensionComponent {
   name: string;
   path: string;
-  props?: { [key: string]: any };
+  props?: { [key: string]: unknown };
   slot?: string;
 }
 
 export interface ExtensionLayout {
   name: string;
   component: string;
-  config: { [key: string]: any };
+  config: { [key: string]: unknown };
 }
 
 export interface ExtensionEndpoint {
@@ -158,7 +158,7 @@ export interface ExtensionEndpoint {
 export interface ExtensionEvent {
   name: string;
   description: string;
-  payload?: { [key: string]: any };
+  payload?: { [key: string]: unknown };
 }
 
 export interface ExtensionService {
@@ -270,22 +270,22 @@ export interface ExtensionContext {
   extensionPath: string;
   globalState: ExtensionState;
   workspaceState: ExtensionState;
-  subscriptions: any[];
+  subscriptions: unknown[];
   logger: ExtensionLogger;
   secrets: ExtensionSecrets;
 }
 
 export interface ExtensionState {
   get<T>(key: string): T | undefined;
-  update(key: string, value: any): Promise<void>;
+  update(key: string, value: unknown): Promise<void>;
   keys(): readonly string[];
 }
 
 export interface ExtensionLogger {
-  debug(message: string, ...args: any[]): void;
-  info(message: string, ...args: any[]): void;
-  warn(message: string, ...args: any[]): void;
-  error(message: string, ...args: any[]): void;
+  debug(message: string, ...args: unknown[]): void;
+  info(message: string, ...args: unknown[]): void;
+  warn(message: string, ...args: unknown[]): void;
+  error(message: string, ...args: unknown[]): void;
 }
 
 export interface ExtensionSecrets {
@@ -299,71 +299,71 @@ export interface ExtensionAPI {
   core: {
     version: string;
     platform: string;
-    getConfig(): any;
-    updateConfig(updates: any): void;
+    getConfig(): Record<string, unknown>;
+    updateConfig(updates: Record<string, unknown>): void;
   };
   
   // UI APIs
   ui: {
     showMessage(message: string, type?: 'info' | 'warning' | 'error'): void;
-    showInputBox(options: any): Promise<string | undefined>;
-    showQuickPick(items: any[], options?: any): Promise<any>;
-    createStatusBarItem(): any;
-    createWebviewPanel(options: any): any;
-    registerCommand(command: string, handler: Function): void;
-    registerTreeDataProvider(viewId: string, provider: any): void;
+    showInputBox(options: Record<string, unknown>): Promise<string | undefined>;
+    showQuickPick(items: unknown[], options?: Record<string, unknown>): Promise<unknown>;
+    createStatusBarItem(): Record<string, unknown>;
+    createWebviewPanel(options: Record<string, unknown>): Record<string, unknown>;
+    registerCommand(command: string, handler: (...args: unknown[]) => void): void;
+    registerTreeDataProvider(viewId: string, provider: Record<string, unknown>): void;
   };
   
   // DICOM APIs
   dicom: {
-    loadStudy(studyId: string): Promise<any>;
-    getStudies(): Promise<any[]>;
-    getViewports(): any[];
-    getActiveViewport(): any;
-    setViewportData(viewportId: string, data: any): void;
-    addMeasurement(measurement: any): void;
-    getMeasurements(): any[];
+    loadStudy(studyId: string): Promise<Record<string, unknown>>;
+    getStudies(): Promise<Record<string, unknown>[]>;
+    getViewports(): Record<string, unknown>[];
+    getActiveViewport(): Record<string, unknown> | null;
+    setViewportData(viewportId: string, data: Record<string, unknown>): void;
+    addMeasurement(measurement: Record<string, unknown>): void;
+    getMeasurements(): Record<string, unknown>[];
     exportStudy(studyId: string, format: string): Promise<Blob>;
   };
   
   // Imaging APIs
   imaging: {
-    createRenderer(type: string): any;
-    applyFilter(filter: string, params: any): void;
-    getImageData(imageId: string): Promise<any>;
-    setImageData(imageId: string, data: any): void;
-    registerTool(tool: any): void;
+    createRenderer(type: string): Record<string, unknown>;
+    applyFilter(filter: string, params: Record<string, unknown>): void;
+    getImageData(imageId: string): Promise<Record<string, unknown>>;
+    setImageData(imageId: string, data: Record<string, unknown>): void;
+    registerTool(tool: Record<string, unknown>): void;
     activateTool(toolName: string): void;
   };
   
   // AI APIs
   ai: {
-    runInference(modelId: string, input: any): Promise<any>;
-    getModels(): Promise<any[]>;
-    registerModel(model: any): void;
-    trainModel(config: any): Promise<any>;
+    runInference(modelId: string, input: Record<string, unknown>): Promise<Record<string, unknown>>;
+    getModels(): Promise<Record<string, unknown>[]>;
+    registerModel(model: Record<string, unknown>): void;
+    trainModel(config: Record<string, unknown>): Promise<Record<string, unknown>>;
   };
   
   // Storage APIs
   storage: {
-    get(key: string): Promise<any>;
-    set(key: string, value: any): Promise<void>;
+    get(key: string): Promise<unknown>;
+    set(key: string, value: unknown): Promise<void>;
     delete(key: string): Promise<void>;
     clear(): Promise<void>;
   };
   
   // Network APIs
   network: {
-    request(url: string, options?: any): Promise<Response>;
-    upload(file: File, url: string): Promise<any>;
+    request(url: string, options?: Record<string, unknown>): Promise<Response>;
+    upload(file: File, url: string): Promise<Record<string, unknown>>;
     download(url: string): Promise<Blob>;
   };
   
   // Events APIs
   events: {
-    on(event: string, handler: Function): void;
-    off(event: string, handler: Function): void;
-    emit(event: string, ...args: any[]): void;
+    on(event: string, handler: (...args: unknown[]) => void): void;
+    off(event: string, handler: (...args: unknown[]) => void): void;
+    emit(event: string, ...args: unknown[]): void;
   };
 }
 
@@ -430,7 +430,7 @@ export class ExtensionFramework extends EventEmitter {
   private loadedInstances: Map<string, ExtensionInstance> = new Map();
   private config: ExtensionFrameworkConfig;
   private isInitialized = false;
-  private updateCheckInterval: any;
+  private updateCheckInterval?: NodeJS.Timeout | number;
   private sandboxWorker?: Worker;
 
   constructor(config: Partial<ExtensionFrameworkConfig> = {}) {
@@ -507,7 +507,7 @@ export class ExtensionFramework extends EventEmitter {
           ext.loadedAt = ext.loadedAt ? new Date(ext.loadedAt) : undefined;
           ext.metadata.installDate = new Date(ext.metadata.installDate);
           ext.metadata.updateDate = ext.metadata.updateDate ? new Date(ext.metadata.updateDate) : undefined;
-          this.extensions.set(ext.id, ext);
+          this.extensions.set(ext.id as string, ext as Extension);
         });
       }
     } catch (error) {
@@ -1172,7 +1172,7 @@ export class ExtensionFramework extends EventEmitter {
   }
 
   // Helper Methods
-  private async extractManifest(extensionData: ArrayBuffer): Promise<ExtensionManifest> {
+  private async extractManifest(_extensionData: ArrayBuffer): Promise<ExtensionManifest> {
     // In a real implementation, this would extract manifest from extension package
     // For demo purposes, return a mock manifest
     return {
@@ -1311,7 +1311,7 @@ export class ExtensionFramework extends EventEmitter {
           return undefined;
         }
       },
-      async update(key: string, value: any): Promise<void> {
+      async update(key: string, value: unknown): Promise<void> {
         localStorage.setItem(`${prefix}_${key}`, JSON.stringify(value));
       },
       keys(): readonly string[] {
@@ -1329,10 +1329,10 @@ export class ExtensionFramework extends EventEmitter {
 
   private createExtensionLogger(extensionId: string): ExtensionLogger {
     return {
-      debug: (message: string, ...args: any[]) => console.debug(`[${extensionId}]`, message, ...args),
-      info: (message: string, ...args: any[]) => console.info(`[${extensionId}]`, message, ...args),
-      warn: (message: string, ...args: any[]) => console.warn(`[${extensionId}]`, message, ...args),
-      error: (message: string, ...args: any[]) => console.error(`[${extensionId}]`, message, ...args)
+      debug: (message: string, ...args: unknown[]) => console.debug(`[${extensionId}]`, message, ...args),
+      info: (message: string, ...args: unknown[]) => console.info(`[${extensionId}]`, message, ...args),
+      warn: (message: string, ...args: unknown[]) => console.warn(`[${extensionId}]`, message, ...args),
+      error: (message: string, ...args: unknown[]) => console.error(`[${extensionId}]`, message, ...args)
     };
   }
 
@@ -1357,27 +1357,27 @@ export class ExtensionFramework extends EventEmitter {
       core: {
         version: '1.0.0',
         platform: 'web',
-        getConfig: () => this.config,
-        updateConfig: (updates: any) => this.updateConfig(updates)
+        getConfig: () => this.config as unknown as Record<string, unknown>,
+        updateConfig: (updates: Record<string, unknown>) => this.updateConfig(updates)
       },
       ui: {
         showMessage: (message: string, type: 'info' | 'warning' | 'error' = 'info') => {
           console.log(`[${extension.id}] ${type.toUpperCase()}: ${message}`);
           this.emit('extensionMessage', { extensionId: extension.id, message, type });
         },
-        showInputBox: async (options: any) => {
-          return prompt(options.prompt || 'Enter value:') || undefined;
+        showInputBox: async (options: Record<string, unknown>) => {
+          return prompt((options.prompt as string) || 'Enter value:') || undefined;
         },
-        showQuickPick: async (items: any[], options?: any) => {
+        showQuickPick: async (items: unknown[], _options?: unknown) => {
           // In a real implementation, show a proper quick pick UI
           return items[0];
         },
         createStatusBarItem: () => ({}),
-        createWebviewPanel: (options: any) => ({}),
-        registerCommand: (command: string, handler: Function) => {
+        createWebviewPanel: (_options: unknown) => ({}),
+        registerCommand: (command: string, handler: (...args: unknown[]) => void) => {
           this.emit('commandRegistered', { extensionId: extension.id, command, handler });
         },
-        registerTreeDataProvider: (viewId: string, provider: any) => {
+        registerTreeDataProvider: (viewId: string, provider: Record<string, unknown>) => {
           this.emit('treeDataProviderRegistered', { extensionId: extension.id, viewId, provider });
         }
       },
@@ -1398,10 +1398,10 @@ export class ExtensionFramework extends EventEmitter {
           this.emit('dicomGetActiveViewport', { extensionId: extension.id });
           return {};
         },
-        setViewportData: (viewportId: string, data: any) => {
+        setViewportData: (viewportId: string, data: Record<string, unknown>) => {
           this.emit('dicomSetViewportData', { extensionId: extension.id, viewportId, data });
         },
-        addMeasurement: (measurement: any) => {
+        addMeasurement: (measurement: Record<string, unknown>) => {
           this.emit('dicomAddMeasurement', { extensionId: extension.id, measurement });
         },
         getMeasurements: () => {
@@ -1418,17 +1418,17 @@ export class ExtensionFramework extends EventEmitter {
           this.emit('imagingCreateRenderer', { extensionId: extension.id, type });
           return {};
         },
-        applyFilter: (filter: string, params: any) => {
+        applyFilter: (filter: string, params: Record<string, unknown>) => {
           this.emit('imagingApplyFilter', { extensionId: extension.id, filter, params });
         },
         getImageData: async (imageId: string) => {
           this.emit('imagingGetImageData', { extensionId: extension.id, imageId });
           return {};
         },
-        setImageData: (imageId: string, data: any) => {
+        setImageData: (imageId: string, data: Record<string, unknown>) => {
           this.emit('imagingSetImageData', { extensionId: extension.id, imageId, data });
         },
-        registerTool: (tool: any) => {
+        registerTool: (tool: Record<string, unknown>) => {
           this.emit('imagingRegisterTool', { extensionId: extension.id, tool });
         },
         activateTool: (toolName: string) => {
@@ -1436,7 +1436,7 @@ export class ExtensionFramework extends EventEmitter {
         }
       },
       ai: {
-        runInference: async (modelId: string, input: any) => {
+        runInference: async (modelId: string, input: Record<string, unknown>) => {
           this.emit('aiRunInference', { extensionId: extension.id, modelId, input });
           return {};
         },
@@ -1444,10 +1444,10 @@ export class ExtensionFramework extends EventEmitter {
           this.emit('aiGetModels', { extensionId: extension.id });
           return [];
         },
-        registerModel: (model: any) => {
+        registerModel: (model: Record<string, unknown>) => {
           this.emit('aiRegisterModel', { extensionId: extension.id, model });
         },
-        trainModel: async (config: any) => {
+        trainModel: async (config: Record<string, unknown>) => {
           this.emit('aiTrainModel', { extensionId: extension.id, config });
           return {};
         }
@@ -1456,7 +1456,7 @@ export class ExtensionFramework extends EventEmitter {
         get: async (key: string) => {
           return localStorage.getItem(`ext_${extension.id}_${key}`);
         },
-        set: async (key: string, value: any) => {
+        set: async (key: string, value: unknown) => {
           localStorage.setItem(`ext_${extension.id}_${key}`, JSON.stringify(value));
         },
         delete: async (key: string) => {
@@ -1468,9 +1468,9 @@ export class ExtensionFramework extends EventEmitter {
         }
       },
       network: {
-        request: async (url: string, options?: any) => {
+        request: async (url: string, options?: Record<string, unknown>) => {
           this.emit('networkRequest', { extensionId: extension.id, url, options });
-          return fetch(url, options);
+          return fetch(url, options as RequestInit);
         },
         upload: async (file: File, url: string) => {
           this.emit('networkUpload', { extensionId: extension.id, file, url });
@@ -1486,13 +1486,13 @@ export class ExtensionFramework extends EventEmitter {
         }
       },
       events: {
-        on: (event: string, handler: Function) => {
+        on: (event: string, handler: (...args: unknown[]) => void) => {
           this.on(`ext_${extension.id}_${event}`, handler);
         },
-        off: (event: string, handler: Function) => {
+        off: (event: string, handler: (...args: unknown[]) => void) => {
           this.off(`ext_${extension.id}_${event}`, handler);
         },
-        emit: (event: string, ...args: any[]) => {
+        emit: (event: string, ...args: unknown[]) => {
           this.emit(`ext_${extension.id}_${event}`, ...args);
         }
       }
@@ -1503,7 +1503,7 @@ export class ExtensionFramework extends EventEmitter {
     extension: Extension,
     context: ExtensionContext,
     api: ExtensionAPI,
-    extensionData: ArrayBuffer
+    _extensionData: ArrayBuffer
   ): Promise<ExtensionInstance> {
     // In a real implementation, this would load and instantiate the extension code
     // For demo purposes, create a mock instance
@@ -1522,9 +1522,9 @@ export class ExtensionFramework extends EventEmitter {
       dispose() {
         console.log(`Disposing extension ${extension.name}`);
         // Cleanup logic
-        context.subscriptions.forEach(sub => {
-          if (typeof sub.dispose === 'function') {
-            sub.dispose();
+        context.subscriptions.forEach((sub: unknown) => {
+          if (typeof sub === 'object' && sub !== null && 'dispose' in sub && typeof (sub as Record<string, unknown>).dispose === 'function') {
+            ((sub as Record<string, unknown>).dispose as () => void)();
           }
         });
         context.subscriptions.length = 0;
@@ -1532,7 +1532,7 @@ export class ExtensionFramework extends EventEmitter {
     };
   }
 
-  private async findExtensionUpdate(extensionId: string, targetVersion?: string): Promise<ExtensionStoreItem | null> {
+  private async findExtensionUpdate(_extensionId: string, _targetVersion?: string): Promise<ExtensionStoreItem | null> {
     // In a real implementation, check all enabled stores for updates
     // For demo purposes, return null (no updates)
     return null;

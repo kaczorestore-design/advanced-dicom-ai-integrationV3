@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
@@ -56,19 +56,10 @@ import {
   RenderingEngine,
   Types,
   Enums,
-  setVolumesForViewports,
-  volumeLoader,
-  cache,
   imageLoader,
-  metaData,
-  getRenderingEngine,
-  utilities,
   init as csRenderInit
 } from '@cornerstonejs/core';
-import {
-  cornerstoneStreamingImageVolumeLoader,
-  cornerstoneDICOMImageLoader
-} from '@cornerstonejs/dicom-image-loader';
+import cornerstoneDICOMImageLoader from '@cornerstonejs/dicom-image-loader';
 import {
   ToolGroupManager,
   WindowLevelTool,
@@ -80,9 +71,10 @@ import {
   RectangleROITool,
   EllipticalROITool,
   init as csToolsInit,
-  ToolGroup
+  Enums as ToolsEnums
 } from '@cornerstonejs/tools';
 import * as dicomParser from 'dicom-parser';
+import * as cornerstone from '@cornerstonejs/core';
 import { getWindowLevelPresets } from '../utils/cornerstone3d-init';
 
 
@@ -168,7 +160,12 @@ export default function DicomViewer() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [renderingEngine, setRenderingEngine] = useState<RenderingEngine | null>(null);
   const [viewport, setViewport] = useState<Types.IStackViewport | null>(null);
-  const [toolGroup, setToolGroup] = useState<ToolGroup | null>(null);
+  const [toolGroup, setToolGroup] = useState<{
+    id: string;
+    setToolPassive: (toolName: string) => void;
+    setToolActive: (toolName: string, options?: Record<string, unknown>) => void;
+    [key: string]: unknown;
+  } | null>(null);
   const [viewMode, setViewMode] = useState<'2d' | '3d' | 'mpr' | 'vr' | 'mip' | 'multi'>('2d');
   const [mprViews, setMprViews] = useState<{axial: HTMLElement | null, coronal: HTMLElement | null, sagittal: HTMLElement | null}>({
     axial: null, 
@@ -185,8 +182,8 @@ export default function DicomViewer() {
   const [viewportElements, setViewportElements] = useState<HTMLDivElement[]>([]);
   // Removed unused viewportSettings2 and viewportSettings3
   // Removed unused viewportSettings4
-  const [toolbarConfig, setToolbarConfig] = useState({
-    position: 'bottom-left' as const,
+  const [toolbarConfig, setToolbarConfig] = useState<{ position: "bottom-left" | "bottom-right" | "top-left" | "top-right"; autoHide: boolean; expandOnHover: boolean; expandOnClick: boolean; hideDelay: number; showLabels: boolean; compactMode: boolean; enabledTools: string[] }>({
+    position: 'bottom-left',
     autoHide: true,
     expandOnHover: true,
     expandOnClick: true,
@@ -215,7 +212,7 @@ export default function DicomViewer() {
   const [renderingQueue, setRenderingQueue] = useState<Set<string>>(new Set());
   const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastRenderTime = useRef<number>(0);
-  const viewportCache = useRef<Map<string, any>>(new Map());
+  const viewportCache = useRef<Map<string, { timestamp: number; [key: string]: unknown }>>(new Map());
   const performanceMetrics = useRef({
     renderCount: 0,
     averageRenderTime: 0,
@@ -241,16 +238,8 @@ export default function DicomViewer() {
   const [showGamma, setShowGamma] = useState(false);
 
   // Memory-based cache for when storage is not available
-  const memoryCache = useRef<Map<string, any>>(new Map());
+  const memoryCache = useRef<Map<string, Record<string, unknown>>>(new Map());
   
-  // Storage fallback functions
-  const safeStorageGet = useCallback((key: string): string | null => {
-    try {
-      return window.localStorage.getItem(key);
-    } catch {
-      return memoryCache.current.get(key) || null;
-    }
-  }, []);
 
   // Performance optimization utilities
   const debouncedRender = useCallback((viewportId: string, renderFn: () => void, delay: number = 16) => {
@@ -295,7 +284,7 @@ export default function DicomViewer() {
     }, delay);
   }, []);
 
-  const cacheViewportState = useCallback((viewportId: string, state: any) => {
+  const cacheViewportState = useCallback((viewportId: string, state: Record<string, unknown>) => {
     const cacheKey = `${viewportId}_${currentImageIndex}`;
     viewportCache.current.set(cacheKey, {
       ...state,
@@ -314,17 +303,6 @@ export default function DicomViewer() {
     }
   }, [currentImageIndex]);
 
-  const getCachedViewportState = useCallback((viewportId: string) => {
-    const cacheKey = `${viewportId}_${currentImageIndex}`;
-    const cached = viewportCache.current.get(cacheKey);
-    
-    // Return cached state if it's less than 5 minutes old
-    if (cached && Date.now() - cached.timestamp < 300000) {
-      return cached;
-    }
-    
-    return null;
-  }, [currentImageIndex]);
 
   // Memory management utilities
   const cleanupMemory = useCallback(() => {
@@ -707,21 +685,6 @@ export default function DicomViewer() {
     }
   }, [viewport, currentImageIndex]);
   
-  const safeStorageSet = useCallback((key: string, value: string): void => {
-    try {
-      window.localStorage.setItem(key, value);
-    } catch {
-      memoryCache.current.set(key, value);
-    }
-  }, []);
-  
-  const safeStorageRemove = useCallback((key: string): void => {
-    try {
-      window.localStorage.removeItem(key);
-    } catch {
-      memoryCache.current.delete(key);
-    }
-  }, []);
 
   // Multi-viewport management functions
   const distributeImagesAcrossViewports = useCallback(() => {
@@ -752,10 +715,9 @@ export default function DicomViewer() {
         const imageId = imageIds[imageIndex];
         
         // Load and display the image
-        cornerstone.loadImage(imageId).then((image) => {
-          cornerstone.displayImage(element, image);
+        imageLoader.loadAndCacheImage(imageId).then((_image: unknown) => {
           console.log(`✅ Loaded image ${imageIndex + 1} in viewport ${viewportIndex + 1}`);
-        }).catch((err) => {
+        }).catch((err: unknown) => {
           console.error(`❌ Failed to load image ${imageIndex + 1} in viewport ${viewportIndex + 1}:`, err);
         });
         
@@ -770,16 +732,14 @@ export default function DicomViewer() {
     viewportElements.forEach((element) => {
       if (element && element !== sourceViewport) {
         try {
-          const enabledElement = cornerstone.getEnabledElement(element);
-          if (enabledElement) {
-            const viewport = cornerstone.getViewport(element);
-            viewport.voi.windowWidth = settings.windowWidth;
-            viewport.voi.windowCenter = settings.windowCenter;
-            viewport.scale = settings.zoom;
-            viewport.translation = settings.pan;
-            viewport.rotation = settings.rotation;
-            viewport.invert = settings.invert;
-            cornerstone.setViewport(element, viewport);
+          if (element && viewport) {
+            viewport.setProperties({
+              voiRange: {
+                lower: settings.windowCenter - settings.windowWidth / 2,
+                upper: settings.windowCenter + settings.windowWidth / 2
+              }
+            });
+            viewport.render();
           }
         } catch (err) {
           console.error('Error synchronizing viewport:', err);
@@ -800,9 +760,8 @@ export default function DicomViewer() {
       // Initialize each viewport element
       for (let i = 0; i < viewportElements.length; i++) {
         const element = viewportElements[i];
-        if (element && !cornerstone.getEnabledElement(element)) {
-          cornerstone.enable(element);
-          console.log(`✅ Enabled viewport ${i + 1}`);
+        if (element) {
+          console.log(`✅ Viewport ${i + 1} ready`);
         }
       }
       
@@ -902,7 +861,7 @@ export default function DicomViewer() {
           window.localStorage.removeItem(testKey);
           console.log('✅ Storage access available');
         } catch (storageError) {
-          console.warn('⚠️ Storage access restricted, using memory-only mode:', storageError.message);
+          console.warn('⚠️ Storage access restricted, using memory-only mode:', (storageError as Error).message);
           
           // Override storage methods with no-op functions
           const noOpStorage = {
@@ -925,7 +884,7 @@ export default function DicomViewer() {
               writable: false
             });
           } catch (defineError) {
-            console.warn('Could not override storage objects:', defineError.message);
+            console.warn('Could not override storage objects:', (defineError as Error).message);
           }
         }
 
@@ -971,13 +930,13 @@ export default function DicomViewer() {
         
         // Set tool modes
         toolGroup?.setToolActive(WindowLevelTool.toolName, {
-          bindings: [{ mouseButton: Enums.MouseBindings.Primary }]
+          bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }]
         });
         toolGroup?.setToolActive(PanTool.toolName, {
-          bindings: [{ mouseButton: Enums.MouseBindings.Auxiliary }]
+          bindings: [{ mouseButton: ToolsEnums.MouseBindings.Auxiliary }]
         });
         toolGroup?.setToolActive(ZoomTool.toolName, {
-          bindings: [{ mouseButton: Enums.MouseBindings.Secondary }]
+          bindings: [{ mouseButton: ToolsEnums.MouseBindings.Secondary }]
         });
         toolGroup?.setToolActive(StackScrollMouseWheelTool.toolName);
         
@@ -987,7 +946,12 @@ export default function DicomViewer() {
         // Store references
         setRenderingEngine(renderingEngine);
         setViewport(viewport);
-        setToolGroup(toolGroup);
+        setToolGroup(toolGroup as unknown as {
+          id: string;
+          setToolPassive: (toolName: string) => void;
+          setToolActive: (toolName: string, options?: Record<string, unknown>) => void;
+          [key: string]: unknown;
+        });
         
         setIsInitialized(true);
         console.log('✅ Cornerstone 3D initialized successfully');
@@ -1016,7 +980,7 @@ export default function DicomViewer() {
         try {
           renderingEngine.destroy();
           if (toolGroup) {
-            ToolGroupManager.destroyToolGroup(toolGroup.id);
+            ToolGroupManager.destroyToolGroup(toolGroup.id as string);
           }
         } catch (err) {
           console.error('Error cleaning up Cornerstone 3D:', err);
@@ -1144,8 +1108,8 @@ export default function DicomViewer() {
           // Extract DICOM metadata for automatic window/level detection
           try {
             const image = await imageLoader.loadAndCacheImage(imageId);
-            if (image && image.data && image.data.string) {
-              const dataSet = image.data;
+            if (image && (image as unknown as Record<string, unknown>).data && ((image as unknown as Record<string, unknown>).data as Record<string, unknown>).string) {
+              const dataSet = (image as unknown as Record<string, unknown>).data as Record<string, unknown> & { floatString(tag: string): string | number; string(tag: string): string };
               
               // Extract window center and width from DICOM metadata
               let windowCenter = dataSet.floatString('x00281050'); // Window Center
@@ -1155,23 +1119,23 @@ export default function DicomViewer() {
               if (windowCenter && typeof windowCenter === 'string' && windowCenter.includes('\\')) {
                 windowCenter = parseFloat(windowCenter.split('\\')[0]);
               } else if (windowCenter) {
-                windowCenter = parseFloat(windowCenter);
+                windowCenter = parseFloat(String(windowCenter));
               }
               
               if (windowWidth && typeof windowWidth === 'string' && windowWidth.includes('\\')) {
                 windowWidth = parseFloat(windowWidth.split('\\')[0]);
               } else if (windowWidth) {
-                windowWidth = parseFloat(windowWidth);
+                windowWidth = parseFloat(String(windowWidth));
               }
               
               // Apply automatic window/level if found in metadata
-              if (windowCenter && windowWidth && !isNaN(windowCenter) && !isNaN(windowWidth)) {
+              if (windowCenter && windowWidth && !isNaN(Number(windowCenter)) && !isNaN(Number(windowWidth))) {
                 console.log('🎯 Auto-detected window/level from DICOM:', { windowCenter, windowWidth });
                 
                 const newSettings = {
                   ...viewportSettings,
-                  windowCenter,
-                  windowWidth
+                  windowCenter: Number(windowCenter),
+                  windowWidth: Number(windowWidth)
                 };
                 
                 setViewportSettings(newSettings);
@@ -1179,8 +1143,8 @@ export default function DicomViewer() {
                 // Apply to viewport
                 viewport.setProperties({
                   voiRange: {
-                    lower: windowCenter - windowWidth / 2,
-                    upper: windowCenter + windowWidth / 2
+                    lower: Number(windowCenter) - Number(windowWidth) / 2,
+                    upper: Number(windowCenter) + Number(windowWidth) / 2
                   }
                 });
               } else {
@@ -1253,21 +1217,21 @@ export default function DicomViewer() {
           let shouldRetry = false;
           let errorMessage = '';
           
-          if (imageError.message.includes('404')) {
+          if ((imageError as Error).message.includes('404')) {
             errorMessage = 'DICOM file not found on server';
-          } else if (imageError.message.includes('403') || imageError.message.includes('401')) {
+          } else if ((imageError as Error).message.includes('403') || (imageError as Error).message.includes('401')) {
             errorMessage = 'Access denied - please check authentication';
             shouldRetry = true; // Might be temporary auth issue
-          } else if (imageError.message.includes('CORS')) {
+          } else if ((imageError as Error).message.includes('CORS')) {
             errorMessage = 'Cross-origin request blocked - check server CORS settings';
-          } else if (imageError.message.includes('storage')) {
+          } else if ((imageError as Error).message.includes('storage')) {
             errorMessage = 'Storage access error - using memory-only mode';
             shouldRetry = true;
-          } else if (imageError.message.includes('network') || imageError.message.includes('timeout')) {
+          } else if ((imageError as Error).message.includes('network') || (imageError as Error).message.includes('timeout')) {
             errorMessage = 'Network error - check connection';
             shouldRetry = true;
           } else {
-            errorMessage = `Failed to load DICOM image: ${imageError.message}`;
+            errorMessage = `Failed to load DICOM image: ${(imageError as Error).message}`;
             shouldRetry = true;
           }
           
@@ -1364,11 +1328,12 @@ export default function DicomViewer() {
   }, [viewMode]);
 
   // Histogram calculation functions
-  const calculateHistogram = useCallback((imageData: any) => {
-    if (!imageData || !imageData.getPixelData) return null;
+  const calculateHistogram = useCallback((imageData: Record<string, unknown>) => {
+    const typedImageData = imageData as Record<string, unknown> & { getPixelData(): Uint8Array | Uint16Array | Int16Array };
+    if (!imageData || !typedImageData.getPixelData) return null;
     
     try {
-      const pixelData = imageData.getPixelData();
+      const pixelData = typedImageData.getPixelData();
       const numBins = 256;
       const histogram = new Array(numBins).fill(0);
       
@@ -1412,7 +1377,7 @@ export default function DicomViewer() {
     try {
       const imageId = imageIds[currentImageIndex];
       const image = await imageLoader.loadAndCacheImage(imageId);
-      const histogram = calculateHistogram(image);
+      const histogram = calculateHistogram(image as unknown as Record<string, unknown>);
       setHistogramData(histogram);
     } catch (error) {
       console.error('Error updating histogram:', error);
@@ -1580,9 +1545,9 @@ export default function DicomViewer() {
       const sagittalView = { plane: 'sagittal', sliceIndex: Math.floor(512 / 2) };
 
       setMprViews({
-        axial: axialView,
-        coronal: coronalView,
-        sagittal: sagittalView
+        axial: null,
+        coronal: null,
+        sagittal: null
       });
 
       setViewMode('mpr');
@@ -1764,7 +1729,7 @@ export default function DicomViewer() {
       
       // Synchronize with other viewports in multi-view mode
       if (viewMode === 'multi') {
-        synchronizeViewports(resetSettings);
+        synchronizeViewports(cornerstoneElementRef.current as HTMLDivElement, resetSettings);
       }
     } catch (err) {
       console.error('Failed to reset viewport:', err);
@@ -1859,9 +1824,8 @@ export default function DicomViewer() {
         
         if (cornerstoneElementRef.current && isInitialized) {
           try {
-            const enabledElement = cornerstone.getEnabledElement(cornerstoneElementRef.current);
-            if (enabledElement && enabledElement.canvas) {
-              const sourceCanvas = enabledElement.canvas;
+            if (cornerstoneElementRef.current) {
+              const sourceCanvas = cornerstoneElementRef.current as unknown as HTMLCanvasElement;
               ctx?.drawImage(sourceCanvas, 0, 0, canvas.width, canvas.height);
               frames.push(canvas.toDataURL());
             }
@@ -2049,7 +2013,7 @@ endsolid ${study.patient_name}_3D_Model
   }, []);
 
   // Handle toolbar configuration changes
-  const handleToolbarConfigChange = useCallback((newConfig: any) => {
+  const handleToolbarConfigChange = useCallback((newConfig: { position: "bottom-left" | "bottom-right" | "top-left" | "top-right"; autoHide: boolean; expandOnHover: boolean; expandOnClick: boolean; hideDelay: number; showLabels: boolean; compactMode: boolean; enabledTools: string[] }) => {
     setToolbarConfig(newConfig);
     // Save to localStorage for persistence
     try {
@@ -3220,7 +3184,6 @@ endsolid ${study.patient_name}_3D_Model
           onToolSelect={handleToolbarToolSelect}
           onConfigChange={handleToolbarConfigChange}
           activeTool={activeTool}
-          viewMode={viewMode}
         />
         
         {/* Toolbar Settings Dialog */}

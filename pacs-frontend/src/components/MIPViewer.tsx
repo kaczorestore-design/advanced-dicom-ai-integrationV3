@@ -1,28 +1,18 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Badge } from './ui/badge';
+import { Card, CardContent } from './ui/card';
 import { Switch } from './ui/switch';
 import { Slider } from './ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { 
-  Layers, 
-  Eye, 
-  EyeOff,
   RotateCcw,
   Download,
-  Settings,
-  Maximize2,
-  Minimize2,
   Play,
   Pause,
   SkipForward,
   SkipBack,
   Volume2,
-  Contrast,
-  Sun,
-  Moon,
   Zap,
   Monitor,
   Cpu
@@ -101,7 +91,7 @@ const MIPViewer: React.FC<MIPViewerProps> = ({
     opacity: 1
   });
 
-  const [viewportSettings, setViewportSettings] = useState<ViewportSettings>({
+  const [, setViewportSettings] = useState<ViewportSettings>({
     zoom: 1,
     pan: { x: 0, y: 0 },
     rotation: 0,
@@ -155,7 +145,7 @@ const MIPViewer: React.FC<MIPViewerProps> = ({
 
         // Initialize Cornerstone3D for MIP rendering
         const { RenderingEngine, Enums } = await import('@cornerstonejs/core');
-        const { volumeLoader } = await import('@cornerstonejs/streaming-image-volume-loader');
+        await import('@cornerstonejs/streaming-image-volume-loader');
         
         // Create rendering engine
         const renderingEngine = new RenderingEngine('mipRenderingEngine');
@@ -174,7 +164,7 @@ const MIPViewer: React.FC<MIPViewerProps> = ({
           }
         };
 
-        renderingEngine.enableElement(viewportInput);
+        renderingEngine.enableElement(viewportInput as any);
         const viewport = renderingEngine.getViewport('MIP_VIEWPORT');
 
         setProcessingProgress(60);
@@ -334,7 +324,7 @@ const MIPViewer: React.FC<MIPViewerProps> = ({
     if (renderingEngineRef.current) {
       const viewport = renderingEngineRef.current.getViewport('MIP_VIEWPORT');
       viewport.resetCamera();
-      viewport.render();
+      (viewport as any).render();
     }
   }, []);
 
@@ -434,7 +424,7 @@ const MIPViewer: React.FC<MIPViewerProps> = ({
                   <label className="text-sm font-medium">Projection Type</label>
                   <Select 
                     value={mipConfig.projectionType} 
-                    onValueChange={(value: any) => updateMIPConfig({ projectionType: value })}
+                    onValueChange={(value: string) => updateMIPConfig({ projectionType: value as MIPConfiguration['projectionType'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -452,7 +442,7 @@ const MIPViewer: React.FC<MIPViewerProps> = ({
                   <label className="text-sm font-medium">Orientation</label>
                   <Select 
                     value={mipConfig.orientation} 
-                    onValueChange={(value: any) => updateMIPConfig({ orientation: value })}
+                    onValueChange={(value: string) => updateMIPConfig({ orientation: value as MIPConfiguration['orientation'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -484,7 +474,7 @@ const MIPViewer: React.FC<MIPViewerProps> = ({
                   <label className="text-sm font-medium">Quality</label>
                   <Select 
                     value={mipConfig.quality} 
-                    onValueChange={(value: any) => updateMIPConfig({ quality: value })}
+                    onValueChange={(value: string) => updateMIPConfig({ quality: value as MIPConfiguration['quality'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />

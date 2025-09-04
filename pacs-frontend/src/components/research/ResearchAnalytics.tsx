@@ -312,7 +312,7 @@ interface AnalysisParameters {
   feature_extraction: FeatureExtractionParams;
   model_config: ModelConfig;
   validation_strategy: ValidationStrategy;
-  hyperparameters: { [key: string]: any };
+  hyperparameters: Record<string, unknown>;
 }
 
 interface PreprocessingParams {
@@ -440,10 +440,10 @@ interface FeatureImportance {
 
 interface Prediction {
   sample_id: string;
-  ground_truth?: any;
-  prediction: any;
+  ground_truth?: unknown;
+  prediction: unknown;
   confidence: number;
-  explanation?: any;
+  explanation?: Record<string, unknown>;
   uncertainty?: number;
 }
 
@@ -451,8 +451,8 @@ interface Visualization {
   id: string;
   type: 'roc_curve' | 'pr_curve' | 'confusion_matrix' | 'feature_importance' | 'learning_curve' | 'tsne' | 'umap' | 'heatmap';
   title: string;
-  data: any;
-  config: any;
+  data: Record<string, unknown>;
+  config: Record<string, unknown>;
 }
 
 interface StatisticalTest {
@@ -1013,7 +1013,7 @@ const ResearchAnalytics: React.FC = () => {
   }, [project, selectedDataset, analysisConfig]);
 
   // Visualization functions
-  const drawVisualization = useCallback((type: string) => {
+  const drawVisualization = useCallback((type: string, _canvas?: HTMLCanvasElement) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -1056,7 +1056,7 @@ const ResearchAnalytics: React.FC = () => {
         ctx.restore();
         break;
         
-      case 'feature_importance':
+      case 'feature_importance': {
         // Draw feature importance bar chart
         const features = ['Feature 1', 'Feature 2', 'Feature 3', 'Feature 4', 'Feature 5'];
         const importance = [0.25, 0.20, 0.18, 0.15, 0.12];
@@ -1081,8 +1081,9 @@ const ResearchAnalytics: React.FC = () => {
           ctx.fillText(importance[i].toFixed(2), 105 + barWidth, y + barHeight / 2 + 3);
         });
         break;
+      }
         
-      case 'confusion_matrix':
+      case 'confusion_matrix': {
         // Draw confusion matrix
         const matrix = [[425, 78], [56, 459]];
         const cellSize = Math.min(width, height) / 3;
@@ -1131,6 +1132,7 @@ const ResearchAnalytics: React.FC = () => {
         ctx.fillText('Benign', startX - 5, startY + cellSize / 2 + 5);
         ctx.fillText('Malignant', startX - 5, startY + cellSize * 1.5 + 5);
         break;
+      }
     }
   }, []);
 

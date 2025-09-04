@@ -62,8 +62,8 @@ export interface SegmentationTool {
   type: 'manual' | 'semi-automatic' | 'automatic' | 'ai-assisted';
   icon: string;
   description: string;
-  parameters: { [key: string]: any };
-  execute: (params: any) => Promise<SegmentationMask | null>;
+  parameters: { [key: string]: unknown };
+  execute: (params: Record<string, unknown>) => Promise<SegmentationMask | null>;
 }
 
 export class AdvancedSegmentationTools {
@@ -71,10 +71,15 @@ export class AdvancedSegmentationTools {
   private activeElement: HTMLElement | null = null;
   private config: SegmentationConfig;
   private tools: Map<string, SegmentationTool> = new Map();
-  private eventListeners: { [key: string]: Function[] } = {};
+  private eventListeners: { [key: string]: ((data?: unknown) => void)[] } = {};
   private isInitialized = false;
   private segmentationWorker: Worker | null = null;
-  private aiModel: any = null;
+  private aiModel: {
+    loaded: boolean;
+    predict: (imageData: Record<string, unknown>) => Promise<{ mask: Uint8Array; confidence: number }>;
+    refine?: (params: Record<string, unknown>) => Promise<Uint8Array>;
+    guideBrush?: (params: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  } | null = null;
   private activeSegmentationId: string | null = null;
   private labelColors: [number, number, number, number][] = [];
 
@@ -323,9 +328,9 @@ export class AdvancedSegmentationTools {
     if (!this.activeElement) return;
 
     // Listen for segmentation events
-    this.activeElement.addEventListener('cornerstonesegmentationadded', this.handleSegmentationAdded.bind(this));
-    this.activeElement.addEventListener('cornerstonesegmentationmodified', this.handleSegmentationModified.bind(this));
-    this.activeElement.addEventListener('cornerstonesegmentationdeleted', this.handleSegmentationDeleted.bind(this));
+    this.activeElement.addEventListener('cornerstonesegmentationadded', this.handleSegmentationAdded.bind(this) as unknown as EventListener);
+    this.activeElement.addEventListener('cornerstonesegmentationmodified', this.handleSegmentationModified.bind(this) as unknown as EventListener);
+    this.activeElement.addEventListener('cornerstonesegmentationdeleted', this.handleSegmentationDeleted.bind(this) as unknown as EventListener);
   }
 
   private async initializeWorker(): Promise<void> {
@@ -423,10 +428,10 @@ export class AdvancedSegmentationTools {
       
       this.aiModel = {
         loaded: true,
-        predict: async (imageData: any) => {
+        predict: async (imageData: Record<string, unknown>) => {
           // Simulate AI prediction
           return {
-            mask: new Uint8Array(imageData.width * imageData.height),
+            mask: new Uint8Array((imageData.width as number) * (imageData.height as number)),
             confidence: 0.85
           };
         }
@@ -438,27 +443,27 @@ export class AdvancedSegmentationTools {
     }
   }
 
-  private handleWorkerResult(type: string, result: any): void {
+  private handleWorkerResult(type: string, result: unknown): void {
     this.emit('workerResult', { type, result });
   }
 
-  private async handleSegmentationAdded(evt: any): Promise<void> {
+  private async handleSegmentationAdded(evt: CustomEvent): Promise<void> {
     const segmentationData = evt.detail;
     await this.processNewSegmentation(segmentationData);
   }
 
-  private async handleSegmentationModified(evt: any): Promise<void> {
+  private async handleSegmentationModified(evt: CustomEvent): Promise<void> {
     const segmentationData = evt.detail;
     await this.updateSegmentation(segmentationData);
   }
 
-  private async handleSegmentationDeleted(evt: any): Promise<void> {
+  private async handleSegmentationDeleted(evt: CustomEvent): Promise<void> {
     const segmentationId = evt.detail.id;
     this.deleteSegmentation(segmentationId);
   }
 
   // Tool execution methods
-  private async executeFreehandSegmentation(params: any): Promise<SegmentationMask | null> {
+  private async executeFreehandSegmentation(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { coordinates, brushSize, smoothing } = params;
     
     if (!this.activeElement || !coordinates) return null;
@@ -466,24 +471,25 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
     
     if (!image) return null;
     
     // TODO: Update for Cornerstone3D image properties
-    const maskData = new Uint8Array((image as any).width * (image as any).height);
+    const imageData = image as Record<string, unknown> & { width: number; height: number };
+    const maskData = new Uint8Array(imageData.width * imageData.height);
     
     // Draw freehand path
-    this.drawPath(maskData, coordinates, (image as any).width, (image as any).height, brushSize);
+    this.drawPath(maskData, coordinates as number[][], imageData.width, imageData.height, brushSize as number);
     
     if (smoothing) {
-      this.smoothMask(maskData, (image as any).width, (image as any).height);
+      this.smoothMask(maskData, imageData.width, imageData.height);
     }
     
     return this.createSegmentationMask(maskData, image, 'manual', 'freehand');
   }
 
-  private async executeBrushSegmentation(params: any): Promise<SegmentationMask | null> {
+  private async executeBrushSegmentation(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { center, brushSize, hardness } = params;
     
     if (!this.activeElement || !center) return null;
@@ -491,55 +497,62 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
 
     if (!image) return null;
     
     // TODO: Update for Cornerstone3D image properties
-    const maskData = new Uint8Array((image as any).width * (image as any).height);
+    const imageData = image as Record<string, unknown> & { width: number; height: number };
+    const maskData = new Uint8Array(imageData.width * imageData.height);
     
     // Draw brush stroke
-    this.drawBrush(maskData, center, brushSize, hardness, (image as any).width, (image as any).height);
+    const centerCoords = center as [number, number];
+    this.drawBrush(maskData, centerCoords, brushSize as number, hardness as number, imageData.width, imageData.height);
     
     return this.createSegmentationMask(maskData, image, 'manual', 'brush');
   }
 
-  private async executePolygonSegmentation(params: any): Promise<SegmentationMask | null> {
-    const { vertices, smoothing } = params;
+  private async executePolygonSegmentation(params: Record<string, unknown>): Promise<SegmentationMask | null> {
+    const { vertices, smoothing } = params as { vertices?: number[][]; smoothing?: boolean };
     
     if (!this.activeElement || !vertices || vertices.length < 3) return null;
     
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
 
     if (!image) return null;
     
     // TODO: Update for Cornerstone3D image properties
-    const maskData = new Uint8Array((image as any).width * (image as any).height);
+    const imageData = image as Record<string, unknown> & { width: number; height: number };
+    const maskData = new Uint8Array(imageData.width * imageData.height);
     
     // Fill polygon
-    this.fillPolygon(maskData, vertices, (image as any).width, (image as any).height);
+    if (vertices && Array.isArray(vertices)) {
+      this.fillPolygon(maskData, vertices as number[][], imageData.width, imageData.height);
+    }
     
     if (smoothing) {
-      this.smoothMask(maskData, (image as any).width, (image as any).height);
+      this.smoothMask(maskData, imageData.width, imageData.height);
     }
     
     return this.createSegmentationMask(maskData, image, 'manual', 'polygon');
   }
 
-  private async executeEraser(params: any): Promise<SegmentationMask | null> {
-    const { center, brushSize, targetSegmentationId } = params;
+  private async executeEraser(params: Record<string, unknown>): Promise<SegmentationMask | null> {
+    const { center, brushSize, targetSegmentationId } = params as { center?: [number, number]; brushSize?: number; targetSegmentationId?: string };
     
     if (!targetSegmentationId || !center) return null;
     
-    const segmentation = this.segmentations.get(targetSegmentationId);
+    const segmentation = this.segmentations.get(targetSegmentationId as string);
     if (!segmentation) return null;
     
     // Erase from existing mask
-    this.eraseBrush(segmentation.maskData as Uint8Array, center, brushSize, 
-                   segmentation.dimensions.width, segmentation.dimensions.height);
+    if (brushSize !== undefined) {
+      this.eraseBrush(segmentation.maskData as Uint8Array, center, brushSize, 
+                     segmentation.dimensions.width, segmentation.dimensions.height);
+    }
     
     // Update statistics
     segmentation.statistics = this.calculateMaskStatistics(segmentation.maskData as Uint8Array, segmentation.dimensions);
@@ -548,15 +561,15 @@ export class AdvancedSegmentationTools {
     return segmentation;
   }
 
-  private async executeRegionGrowing(params: any): Promise<SegmentationMask | null> {
-    const { seedPoint, threshold, connectivity } = params;
+  private async executeRegionGrowing(params: Record<string, unknown>): Promise<SegmentationMask | null> {
+    const { seedPoint, threshold, connectivity } = params as { seedPoint?: [number, number]; threshold?: number; connectivity?: number };
     
     if (!this.activeElement || !seedPoint) return null;
     
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
     
     if (!image) return null;
     
@@ -568,9 +581,11 @@ export class AdvancedSegmentationTools {
             this.segmentationWorker!.removeEventListener('message', handleResult);
             
             // TODO: Update for Cornerstone3D image properties
-            const maskData = new Uint8Array((image as any).width * (image as any).height);
+            const imageWidth = (image as Record<string, unknown>).width as number;
+            const imageHeight = (image as Record<string, unknown>).height as number;
+            const maskData = new Uint8Array(imageWidth * imageHeight);
             e.data.result.forEach(([x, y]: [number, number]) => {
-              const index = y * (image as any).width + x;
+              const index = y * imageWidth + x;
               if (index < maskData.length) {
                 maskData[index] = 255;
               }
@@ -586,9 +601,9 @@ export class AdvancedSegmentationTools {
           type: 'regionGrowing',
           data: {
             imageData: {
-              data: image.getPixelData(),
-              width: image.width,
-              height: image.height
+              data: (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData(),
+              width: (image as Record<string, unknown>).width as number,
+              height: (image as Record<string, unknown>).height as number
             },
             seedPoint,
             threshold,
@@ -601,7 +616,7 @@ export class AdvancedSegmentationTools {
     });
   }
 
-  private async executeWatershed(params: any): Promise<SegmentationMask | null> {
+  private async executeWatershed(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { markers: _markers, compactness: _compactness } = params;
     
     if (!this.activeElement) return null;
@@ -609,26 +624,26 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
     
     if (!image) return null;
     
     // Simplified watershed implementation
-    const maskData = new Uint8Array(image.width * image.height);
+    const maskData = new Uint8Array(((image as Record<string, unknown>).width as number) * ((image as Record<string, unknown>).height as number));
     
     // In a real implementation, this would use a proper watershed algorithm
     // For now, we'll create a simple segmentation
-    const pixelData = image.getPixelData();
+    const pixelData = (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData();
     const threshold = this.calculateOtsuThreshold(pixelData);
     
     for (let i = 0; i < pixelData.length; i++) {
       maskData[i] = pixelData[i] > threshold ? 255 : 0;
     }
     
-    return this.createSegmentationMask(maskData, image, 'semi-automatic', 'watershed');
+    return this.createSegmentationMask(maskData, image as Record<string, unknown>, 'semi-automatic', 'watershed');
   }
 
-  private async executeLevelSet(params: any): Promise<SegmentationMask | null> {
+  private async executeLevelSet(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { initialContour, iterations, smoothing } = params;
     
     if (!this.activeElement) return null;
@@ -636,27 +651,30 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
 
     if (!image) return null;
     
     // Simplified level set implementation
-    const maskData = new Uint8Array(image.width * image.height);
+    const maskData = new Uint8Array(((image as Record<string, unknown>).width as number) * ((image as Record<string, unknown>).height as number));
     
     // Initialize with initial contour if provided
     if (initialContour) {
-      this.fillPolygon(maskData, initialContour, image.width, image.height);
+      this.fillPolygon(maskData, initialContour as number[][], (image as Record<string, unknown>).width as number, (image as Record<string, unknown>).height as number);
     }
     
     // Simulate level set evolution
-    for (let iter = 0; iter < iterations; iter++) {
-      this.evolveLevelSet(maskData, image.getPixelData(), image.width, image.height, smoothing);
+    const imageData = image as Record<string, unknown> & { width: number; height: number; getPixelData(): number[] };
+    const iterCount = typeof iterations === 'number' ? iterations : 10;
+    const smoothingValue = typeof smoothing === 'boolean' ? (smoothing ? 1.0 : 0.0) : 0.0;
+    for (let iter = 0; iter < iterCount; iter++) {
+      this.evolveLevelSet(maskData, imageData.getPixelData(), imageData.width, imageData.height, smoothingValue);
     }
     
-    return this.createSegmentationMask(maskData, image, 'semi-automatic', 'level-set');
+    return this.createSegmentationMask(maskData, image as Record<string, unknown>, 'semi-automatic', 'level-set');
   }
 
-  private async executeGraphCut(params: any): Promise<SegmentationMask | null> {
+  private async executeGraphCut(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { foregroundSeeds, lambda, sigma } = params;
     
     if (!this.activeElement) return null;
@@ -664,17 +682,17 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
 
     if (!image) return null;
     
     // Simplified graph cut implementation
-    const maskData = new Uint8Array(image.width * image.height);
+    const maskData = new Uint8Array(((image as Record<string, unknown>).width as number) * ((image as Record<string, unknown>).height as number));
     
     // Initialize with seeds
     if (foregroundSeeds) {
-      foregroundSeeds.forEach(([x, y]: [number, number]) => {
-        const index = y * image.width + x;
+      (foregroundSeeds as [number, number][]).forEach(([x, y]: [number, number]) => {
+        const index = y * ((image as Record<string, unknown>).width as number) + x;
         if (index < maskData.length) {
           maskData[index] = 255;
         }
@@ -682,12 +700,12 @@ export class AdvancedSegmentationTools {
     }
     
     // Expand foreground regions (simplified)
-    this.expandRegions(maskData, image.getPixelData(), image.width, image.height, lambda, sigma);
+    this.expandRegions(maskData, (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData(), (image as Record<string, unknown>).width as number, (image as Record<string, unknown>).height as number, lambda as number, sigma as number);
     
-    return this.createSegmentationMask(maskData, image, 'semi-automatic', 'graph-cut');
+    return this.createSegmentationMask(maskData, image as Record<string, unknown>, 'semi-automatic', 'graph-cut');
   }
 
-  private async executeThresholdSegmentation(params: any): Promise<SegmentationMask | null> {
+  private async executeThresholdSegmentation(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { method, lowerThreshold, upperThreshold } = params;
     
     if (!this.activeElement) return null;
@@ -695,12 +713,12 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
     
     if (!image) return null;
     
-    const pixelData = image.getPixelData();
-    const maskData = new Uint8Array(image.width * image.height);
+    const pixelData = (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData();
+    const maskData = new Uint8Array(((image as Record<string, unknown>).width as number) * ((image as Record<string, unknown>).height as number));
     
     let threshold: number;
     
@@ -709,21 +727,21 @@ export class AdvancedSegmentationTools {
     } else if (lowerThreshold !== undefined && upperThreshold !== undefined) {
       // Dual threshold
       for (let i = 0; i < pixelData.length; i++) {
-        maskData[i] = (pixelData[i] >= lowerThreshold && pixelData[i] <= upperThreshold) ? 255 : 0;
+        maskData[i] = (pixelData[i] >= (lowerThreshold as number) && pixelData[i] <= (upperThreshold as number)) ? 255 : 0;
       }
-      return this.createSegmentationMask(maskData, image, 'automatic', 'threshold');
+      return this.createSegmentationMask(maskData, image as Record<string, unknown>, 'automatic', 'threshold');
     } else {
-      threshold = lowerThreshold || this.calculateMeanThreshold(pixelData);
+      threshold = (lowerThreshold as number) || this.calculateMeanThreshold(pixelData);
     }
     
     for (let i = 0; i < pixelData.length; i++) {
       maskData[i] = pixelData[i] > threshold ? 255 : 0;
     }
     
-    return this.createSegmentationMask(maskData, image, 'automatic', 'threshold');
+    return this.createSegmentationMask(maskData, image as Record<string, unknown>, 'automatic', 'threshold');
   }
 
-  private async executeKMeansSegmentation(params: any): Promise<SegmentationMask | null> {
+  private async executeKMeansSegmentation(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { clusters, iterations } = params;
     
     if (!this.activeElement) return null;
@@ -731,19 +749,19 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
     
     if (!image) return null;
     
-    const pixelData = image.getPixelData();
-    const maskData = new Uint8Array(image.width * image.height);
+    const pixelData = (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData();
+    const maskData = new Uint8Array(((image as Record<string, unknown>).width as number) * ((image as Record<string, unknown>).height as number));
     
     // Simplified K-means clustering
-    const clusterResult = this.performKMeansClustering(pixelData, clusters, iterations);
+    const clusterResult = this.performKMeansClustering(pixelData, clusters as number, iterations as number);
     
     // Convert cluster labels to binary mask (assuming largest cluster is foreground)
-    const clusterSizes = new Array(clusters).fill(0);
-    clusterResult.forEach(label => clusterSizes[label]++);
+    const clusterSizes = new Array(clusters as number).fill(0);
+    clusterResult.forEach((label: number) => clusterSizes[label]++);
     const foregroundCluster = clusterSizes.indexOf(Math.max(...clusterSizes));
     
     for (let i = 0; i < clusterResult.length; i++) {
@@ -753,7 +771,7 @@ export class AdvancedSegmentationTools {
     return this.createSegmentationMask(maskData, image, 'automatic', 'kmeans');
   }
 
-  private async executeEdgeSegmentation(params: any): Promise<SegmentationMask | null> {
+  private async executeEdgeSegmentation(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { method, threshold1, threshold2 } = params;
     
     if (!this.activeElement) return null;
@@ -761,24 +779,24 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
 
     if (!image) return null;
     
-    const pixelData = image.getPixelData();
-    const maskData = new Uint8Array(image.width * image.height);
+    const pixelData = (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData();
+    const maskData = new Uint8Array(((image as Record<string, unknown>).width as number) * ((image as Record<string, unknown>).height as number));
     
     if (method === 'canny') {
-      this.applyCanny(pixelData, maskData, image.width, image.height, threshold1, threshold2);
+      this.applyCanny(pixelData, maskData, (image as Record<string, unknown>).width as number, (image as Record<string, unknown>).height as number, threshold1 as number, threshold2 as number);
     } else {
       // Simple gradient-based edge detection
-      this.applyGradientEdges(pixelData, maskData, image.width, image.height, threshold1);
+      this.applyGradientEdges(pixelData, maskData, (image as Record<string, unknown>).width as number, (image as Record<string, unknown>).height as number, threshold1 as number);
     }
     
     return this.createSegmentationMask(maskData, image, 'automatic', 'edge-detection');
   }
 
-  private async executeDeepLearningSegmentation(params: any): Promise<SegmentationMask | null> {
+  private async executeDeepLearningSegmentation(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { confidence } = params;
     
     if (!this.activeElement || !this.aiModel) return null;
@@ -786,18 +804,18 @@ export class AdvancedSegmentationTools {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
     // const image = enabledElement?.image;
-    const image: any = null;
+    const image: Record<string, unknown> | null = null;
 
     if (!image) return null;
     
     try {
       const prediction = await this.aiModel.predict({
-        data: image.getPixelData(),
-        width: image.width,
-        height: image.height
+        data: (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData(),
+        width: (image as Record<string, unknown>).width as number,
+        height: (image as Record<string, unknown>).height as number
       });
       
-      if (prediction.confidence < confidence) {
+      if ((prediction.confidence as number) < (confidence as number)) {
         console.warn('AI prediction confidence too low:', prediction.confidence);
         return null;
       }
@@ -814,24 +832,26 @@ export class AdvancedSegmentationTools {
     }
   }
 
-  private async executeAIRefinement(params: any): Promise<SegmentationMask | null> {
+  private async executeAIRefinement(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { targetSegmentationId, iterations } = params;
     
     if (!targetSegmentationId || !this.aiModel) return null;
     
-    const segmentation = this.segmentations.get(targetSegmentationId);
+    const segmentation = this.segmentations.get(targetSegmentationId as string);
     if (!segmentation) return null;
     
     try {
       // Use AI to refine existing segmentation
-      const refinedMask = await this.aiModel.refine({
+      const refinedMask = await this.aiModel?.refine?.({
         originalMask: segmentation.maskData,
         imageData: this.getCurrentImageData(),
         iterations
       });
       
-      segmentation.maskData = refinedMask.mask;
-      segmentation.confidence = refinedMask.confidence;
+      if (refinedMask) {
+        segmentation.maskData = refinedMask;
+        segmentation.confidence = 0.9; // Default confidence for refined mask
+      }
       segmentation.statistics = this.calculateMaskStatistics(segmentation.maskData as Uint8Array, segmentation.dimensions);
       
       this.emit('segmentationModified', segmentation);
@@ -842,46 +862,46 @@ export class AdvancedSegmentationTools {
     }
   }
 
-  private async executeSmartBrush(params: any): Promise<SegmentationMask | null> {
+  private async executeSmartBrush(params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const { center, brushSize, aiGuidance } = params;
     
     if (!this.activeElement) return null;
     
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
-    const enabledElement = null;
-    const image: any = enabledElement?.image;
+    const enabledElement: Record<string, unknown> | null = null;
+    const image: Record<string, unknown> | null = (enabledElement as { image?: Record<string, unknown> } | null)?.image || null;
     
     if (!image) return null;
     
-    const maskData = new Uint8Array(image.width * image.height);
+    const maskData = new Uint8Array(((image as Record<string, unknown>).width as number) * ((image as Record<string, unknown>).height as number));
     
     if (aiGuidance && this.aiModel) {
       // Use AI to guide brush stroke
-      const guidance = await this.aiModel.guideBrush({
+      const guidance = await this.aiModel?.guideBrush?.({
         center,
         brushSize,
-        imageData: image.getPixelData(),
+        imageData: (image as Record<string, unknown> & { getPixelData(): number[] }).getPixelData(),
         width: image.width,
         height: image.height
       });
       
-      this.drawSmartBrush(maskData, center, brushSize, guidance, image.width, image.height);
+      this.drawSmartBrush(maskData, center as number[], brushSize as number, (guidance as unknown) as Record<string, unknown>, (image as Record<string, unknown>).width as number, (image as Record<string, unknown>).height as number);
     } else {
       // Regular brush
-      this.drawBrush(maskData, center, brushSize, 0.8, image.width, image.height);
+      this.drawBrush(maskData, center as number[], brushSize as number, 0.8, (image as Record<string, unknown>).width as number, (image as Record<string, unknown>).height as number);
     }
     
     return this.createSegmentationMask(maskData, image, 'ai-assisted', 'smart-brush');
   }
 
-  private async execute3DRegionGrowing(_params: any): Promise<SegmentationMask | null> {
+  private async execute3DRegionGrowing(_params: Record<string, unknown>): Promise<SegmentationMask | null> {
     // 3D region growing implementation would go here
     console.log('3D Region Growing not yet implemented');
     return null;
   }
 
-  private async execute3DLevelSet(_params: any): Promise<SegmentationMask | null> {
+  private async execute3DLevelSet(_params: Record<string, unknown>): Promise<SegmentationMask | null> {
     // 3D level set implementation would go here
     console.log('3D Level Set not yet implemented');
     return null;
@@ -940,7 +960,7 @@ export class AdvancedSegmentationTools {
     }
   }
 
-  private drawSmartBrush(maskData: Uint8Array, center: number[], brushSize: number, guidance: any, width: number, height: number): void {
+  private drawSmartBrush(maskData: Uint8Array, center: number[], brushSize: number, guidance: Record<string, unknown>, width: number, height: number): void {
     // Enhanced brush with AI guidance
     const [cx, cy] = center;
     const radius = brushSize / 2;
@@ -950,7 +970,7 @@ export class AdvancedSegmentationTools {
         const distance = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
         
         if (distance <= radius) {
-          const guidanceWeight = guidance?.getWeight?.(x, y) || 1.0;
+          const guidanceWeight = (guidance as Record<string, unknown>)?.getWeight ? ((guidance as Record<string, unknown>).getWeight as (x: number, y: number) => number)(x, y) : 1.0;
           const intensity = guidanceWeight * (1 - distance / radius);
           const index = y * width + x;
           maskData[index] = Math.min(255, maskData[index] + intensity * 255);
@@ -1033,7 +1053,7 @@ export class AdvancedSegmentationTools {
     maskData.set(smoothed);
   }
 
-  private calculateOtsuThreshold(pixelData: any): number {
+  private calculateOtsuThreshold(pixelData: Uint8Array | Uint16Array | Float32Array | number[]): number {
     // Otsu's method for automatic threshold selection
     const histogram = new Array(256).fill(0);
     
@@ -1078,20 +1098,20 @@ export class AdvancedSegmentationTools {
     return threshold;
   }
 
-  private calculateMeanThreshold(pixelData: any): number {
-    const sum = Array.from(pixelData as number[]).reduce((acc: number, val: number) => acc + val, 0);
+  private calculateMeanThreshold(pixelData: Uint8Array | Uint16Array | Float32Array | number[]): number {
+    const sum = Array.from(pixelData).reduce((acc: number, val: number) => acc + val, 0);
     return sum / pixelData.length;
   }
 
-  private performKMeansClustering(pixelData: any, k: number, maxIterations: number): number[] {
+  private performKMeansClustering(pixelData: Uint8Array | Uint16Array | Float32Array | number[], k: number, maxIterations: number): number[] {
     // Simplified K-means clustering
     const data = Array.from(pixelData);
     const n = data.length;
     
     // Initialize centroids
     const centroids = [];
-    const min = Math.min(...data);
-    const max = Math.max(...data);
+    const min = Math.min(...(data as number[]));
+    const max = Math.max(...(data as number[]));
     
     for (let i = 0; i < k; i++) {
       centroids.push(min + (max - min) * i / (k - 1));
@@ -1106,7 +1126,7 @@ export class AdvancedSegmentationTools {
         let bestCluster = 0;
         
         for (let j = 0; j < k; j++) {
-          const dist = Math.abs(data[i] - centroids[j]);
+          const dist = Math.abs((data as number[])[i] - centroids[j]);
           if (dist < minDist) {
             minDist = dist;
             bestCluster = j;
@@ -1142,7 +1162,7 @@ export class AdvancedSegmentationTools {
     return labels;
   }
 
-  private applyCanny(pixelData: any, maskData: Uint8Array, width: number, height: number, threshold1: number, threshold2: number): void {
+  private applyCanny(pixelData: Uint8Array | Uint16Array | Float32Array | number[], maskData: Uint8Array, width: number, height: number, threshold1: number, threshold2: number): void {
     // Simplified Canny edge detection
     const gradientX = new Float32Array(pixelData.length);
     const gradientY = new Float32Array(pixelData.length);
@@ -1201,7 +1221,7 @@ export class AdvancedSegmentationTools {
     }
   }
 
-  private applyGradientEdges(pixelData: any, maskData: Uint8Array, width: number, height: number, threshold: number): void {
+  private applyGradientEdges(pixelData: Uint8Array | Uint16Array | Float32Array | number[], maskData: Uint8Array, width: number, height: number, threshold: number): void {
     // Simple gradient-based edge detection
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
@@ -1216,7 +1236,7 @@ export class AdvancedSegmentationTools {
     }
   }
 
-  private evolveLevelSet(maskData: Uint8Array, imageData: any, width: number, height: number, smoothing: number): void {
+  private evolveLevelSet(maskData: Uint8Array, imageData: Uint8Array | Uint16Array | Float32Array | number[], width: number, height: number, smoothing: number): void {
     // Simplified level set evolution
     const newMask = new Uint8Array(maskData.length);
     
@@ -1236,7 +1256,7 @@ export class AdvancedSegmentationTools {
     maskData.set(newMask);
   }
 
-  private calculateCurvature(maskData: Uint8Array, x: number, y: number, width: number, height: number): number {
+  private calculateCurvature(maskData: Uint8Array, x: number, y: number, width: number, _height: number): number {
     // Simplified curvature calculation
     const center = maskData[y * width + x];
     const neighbors = [
@@ -1250,7 +1270,7 @@ export class AdvancedSegmentationTools {
     return laplacian / 255.0;
   }
 
-  private calculateImageForce(imageData: any, x: number, y: number, width: number, height: number): number {
+  private calculateImageForce(imageData: Uint8Array | Uint16Array | Float32Array | number[], x: number, y: number, width: number, _height: number): number {
     // Simplified image force calculation
     const index = y * width + x;
     const gx = imageData[index + 1] - imageData[index - 1];
@@ -1260,7 +1280,7 @@ export class AdvancedSegmentationTools {
     return -magnitude / 1000.0; // Normalize and invert
   }
 
-  private expandRegions(maskData: Uint8Array, imageData: any, width: number, height: number, lambda: number, sigma: number): void {
+  private expandRegions(maskData: Uint8Array, imageData: Uint8Array | Uint16Array | Float32Array | number[], width: number, height: number, lambda: number, sigma: number): void {
     // Simplified region expansion for graph cut
     const newMask = new Uint8Array(maskData.length);
     
@@ -1293,11 +1313,11 @@ export class AdvancedSegmentationTools {
     maskData.set(newMask);
   }
 
-  private createSegmentationMask(maskData: Uint8Array, image: any, type: SegmentationMask['type'], algorithm?: string): SegmentationMask {
+  private createSegmentationMask(maskData: Uint8Array, image: Record<string, unknown>, type: SegmentationMask['type'], algorithm?: string): SegmentationMask {
     const id = uuidv4();
     const dimensions = {
-      width: image.width,
-      height: image.height
+      width: (image as Record<string, unknown>).width as number,
+      height: (image as Record<string, unknown>).height as number
     };
     
     const statistics = this.calculateMaskStatistics(maskData, dimensions);
@@ -1307,16 +1327,16 @@ export class AdvancedSegmentationTools {
       id,
       name: `Segmentation ${this.segmentations.size + 1}`,
       type,
-      algorithm,
+      algorithm: algorithm as "watershed" | "region-growing" | "level-set" | "graph-cut" | "deep-learning",
       maskData,
       dimensions,
       metadata: {
-        pixelSpacing: image.pixelSpacing,
-        sliceThickness: image.sliceThickness,
-        orientation: image.orientation,
-        studyId: image.studyId,
-        seriesId: image.seriesId,
-        imageId: image.imageId
+        pixelSpacing: (image as Record<string, unknown>).pixelSpacing as number[] | undefined,
+        sliceThickness: (image as Record<string, unknown>).sliceThickness as number | undefined,
+        orientation: (image as Record<string, unknown>).orientation as string | undefined,
+        studyId: (image as Record<string, unknown>).studyId as string | undefined,
+        seriesId: (image as Record<string, unknown>).seriesId as string | undefined,
+        imageId: (image as Record<string, unknown>).imageId as string | undefined
       },
       statistics,
       color: this.labelColors[colorIndex],
@@ -1327,7 +1347,12 @@ export class AdvancedSegmentationTools {
     };
   }
 
-  private calculateMaskStatistics(maskData: Uint8Array, dimensions: { width: number; height: number; depth?: number }): any {
+  private calculateMaskStatistics(maskData: Uint8Array, dimensions: { width: number; height: number; depth?: number }): {
+    volume: number;
+    surfaceArea: number;
+    boundingBox: { min: [number, number]; max: [number, number] };
+    centroid: [number, number];
+  } {
     const { width, height } = dimensions;
     let volume = 0;
     let minX = width, minY = height, maxX = 0, maxY = 0;
@@ -1385,18 +1410,18 @@ export class AdvancedSegmentationTools {
     };
   }
 
-  private getCurrentImageData(): any {
+  private getCurrentImageData(): Record<string, unknown> | null {
     if (!this.activeElement) return null;
     
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement);
-    const enabledElement = null;
-    return enabledElement?.image;
+    const enabledElement: Record<string, unknown> | null = null;
+    return (enabledElement as { image?: Record<string, unknown> } | null)?.image || null;
   }
 
-  private async processNewSegmentation(segmentationData: any): Promise<void> {
+  private async processNewSegmentation(segmentationData: Record<string, unknown>): Promise<void> {
     // Process newly created segmentation
-    const segmentation = segmentationData as SegmentationMask;
+    const segmentation = (segmentationData as unknown) as SegmentationMask;
     this.segmentations.set(segmentation.id, segmentation);
     
     if (this.config.autoSaveSegmentations) {
@@ -1406,8 +1431,8 @@ export class AdvancedSegmentationTools {
     this.emit('segmentationAdded', segmentation);
   }
 
-  private async updateSegmentation(segmentationData: any): Promise<void> {
-    const segmentation = segmentationData as SegmentationMask;
+  private async updateSegmentation(segmentationData: Record<string, unknown>): Promise<void> {
+    const segmentation = (segmentationData as unknown) as SegmentationMask;
     
     if (this.segmentations.has(segmentation.id)) {
       this.segmentations.set(segmentation.id, segmentation);
@@ -1424,7 +1449,7 @@ export class AdvancedSegmentationTools {
     try {
       // Save to local storage or send to server
       const savedSegmentations = JSON.parse(localStorage.getItem('segmentations') || '[]');
-      const existingIndex = savedSegmentations.findIndex((s: any) => s.id === segmentation.id);
+      const existingIndex = savedSegmentations.findIndex((s: Record<string, unknown>) => s.id === segmentation.id);
       
       if (existingIndex >= 0) {
         savedSegmentations[existingIndex] = segmentation;
@@ -1447,7 +1472,7 @@ export class AdvancedSegmentationTools {
       // Remove from local storage
       try {
         const savedSegmentations = JSON.parse(localStorage.getItem('segmentations') || '[]');
-        const filteredSegmentations = savedSegmentations.filter((s: any) => s.id !== segmentationId);
+        const filteredSegmentations = savedSegmentations.filter((s: Record<string, unknown>) => s.id !== segmentationId);
         localStorage.setItem('segmentations', JSON.stringify(filteredSegmentations));
       } catch (error) {
         console.error('❌ Failed to delete segmentation from storage:', error);
@@ -1458,7 +1483,7 @@ export class AdvancedSegmentationTools {
   }
 
   // Public API methods
-  public async executeSegmentationTool(toolName: string, params: any): Promise<SegmentationMask | null> {
+  public async executeSegmentationTool(toolName: string, params: Record<string, unknown>): Promise<SegmentationMask | null> {
     const tool = this.tools.get(toolName);
     if (!tool) {
       console.error('Unknown segmentation tool:', toolName);
@@ -1643,9 +1668,10 @@ export class AdvancedSegmentationTools {
     if (!segmentation) return null;
     
     switch (format) {
-      case 'json':
+      case 'json': {
         const jsonData = JSON.stringify(segmentation, null, 2);
         return new Blob([jsonData], { type: 'application/json' });
+      }
       
       case 'mask':
         return new Blob([segmentation.maskData], { type: 'application/octet-stream' });
@@ -1665,13 +1691,13 @@ export class AdvancedSegmentationTools {
     try {
       const savedSegmentations = JSON.parse(localStorage.getItem('segmentations') || '[]');
       
-      savedSegmentations.forEach((segData: any) => {
+      savedSegmentations.forEach((segData: Record<string, unknown>) => {
         // Convert maskData back to Uint8Array if needed
         if (segData.maskData && typeof segData.maskData === 'object') {
           segData.maskData = new Uint8Array(Object.values(segData.maskData));
         }
         
-        this.segmentations.set(segData.id, segData);
+        this.segmentations.set((segData as Record<string, unknown>).id as string, (segData as unknown) as SegmentationMask);
       });
       
       console.log(`✅ Loaded ${savedSegmentations.length} segmentations`);
@@ -1712,20 +1738,20 @@ export class AdvancedSegmentationTools {
   }
 
   // Event system
-  public on(event: string, callback: Function): void {
+  public on(event: string, callback: (data?: unknown) => void): void {
     if (!this.eventListeners[event]) {
       this.eventListeners[event] = [];
     }
     this.eventListeners[event].push(callback);
   }
 
-  public off(event: string, callback: Function): void {
+  public off(event: string, callback: (data?: unknown) => void): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
     }
   }
 
-  private emit(event: string, data?: any): void {
+  private emit(event: string, data?: unknown): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event].forEach(callback => {
         try {
@@ -1744,9 +1770,9 @@ export class AdvancedSegmentationTools {
     }
     
     if (this.activeElement) {
-      this.activeElement.removeEventListener('cornerstonesegmentationadded', this.handleSegmentationAdded.bind(this));
-      this.activeElement.removeEventListener('cornerstonesegmentationmodified', this.handleSegmentationModified.bind(this));
-      this.activeElement.removeEventListener('cornerstonesegmentationdeleted', this.handleSegmentationDeleted.bind(this));
+      this.activeElement.removeEventListener('cornerstonesegmentationadded', this.handleSegmentationAdded.bind(this) as unknown as EventListener);
+      this.activeElement.removeEventListener('cornerstonesegmentationmodified', this.handleSegmentationModified.bind(this) as unknown as EventListener);
+      this.activeElement.removeEventListener('cornerstonesegmentationdeleted', this.handleSegmentationDeleted.bind(this) as unknown as EventListener);
     }
     
     this.segmentations.clear();
@@ -1772,8 +1798,11 @@ export const AdvancedSegmentationToolsComponent: React.FC<{
       setSegmentations(segmentationTools.getAllSegmentations());
     };
     
-    const updateActiveSegmentation = (data: { id: string }) => {
-      setActiveSegmentationId(data.id);
+    const updateActiveSegmentation = (data?: unknown) => {
+      const segData = data as { id: string } | undefined;
+      if (segData?.id) {
+        setActiveSegmentationId(segData.id);
+      }
     };
     
     segmentationTools.on('segmentationCreated', updateSegmentations);

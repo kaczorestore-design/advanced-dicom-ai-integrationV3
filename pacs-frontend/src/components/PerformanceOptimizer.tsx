@@ -101,7 +101,7 @@ export interface MemoryBlock {
 
 export interface CacheEntry {
   key: string;
-  data: any;
+  data: unknown;
   size: number; // bytes
   createdAt: Date;
   lastAccessed: Date;
@@ -135,7 +135,7 @@ export interface OptimizationCondition {
 
 export interface OptimizationAction {
   type: 'reduce_quality' | 'clear_cache' | 'compress_data' | 'offload_gpu' | 'limit_connections' | 'garbage_collect' | 'reduce_precision' | 'enable_lod';
-  parameters: { [key: string]: any };
+  parameters: Record<string, unknown>;
   priority: number;
   reversible: boolean;
 }
@@ -153,7 +153,7 @@ export interface PerformanceProfile {
   lodEnabled: boolean;
   adaptiveQuality: boolean;
   strategies: string[]; // strategy IDs
-  customSettings: { [key: string]: any };
+  customSettings: Record<string, unknown>;
 }
 
 export interface DatasetOptimization {
@@ -199,12 +199,12 @@ export interface WorkerPool {
 export interface WorkerTask {
   id: string;
   type: string;
-  data: any;
+  data: unknown;
   priority: number;
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
-  result?: any;
+  result?: unknown;
   error?: string;
   retries: number;
   maxRetries: number;
@@ -237,10 +237,10 @@ export class PerformanceOptimizer extends EventEmitter {
   private workerPools: Map<string, WorkerPool> = new Map();
   private gpuAcceleration?: GPUAcceleration;
   private isInitialized = false;
-  private metricsInterval: any;
-  private optimizationInterval: any;
+  private metricsInterval?: NodeJS.Timeout | number;
+  private optimizationInterval?: NodeJS.Timeout | number;
   private performanceObserver?: PerformanceObserver;
-  private memoryMonitor?: any;
+  private memoryMonitor?: NodeJS.Timeout | number;
 
 
   constructor(config: Partial<PerformanceOptimizerConfig> = {}) {
@@ -336,7 +336,7 @@ export class PerformanceOptimizer extends EventEmitter {
       // Try WebGPU if available
       if ('gpu' in navigator) {
         try {
-          const adapter = await (navigator as any).gpu.requestAdapter();
+          const adapter = await (navigator as { gpu: { requestAdapter(): Promise<unknown> } }).gpu.requestAdapter();
           if (adapter) {
             // WebGPU device available
             console.log('✅ WebGPU acceleration available');
@@ -561,7 +561,7 @@ export class PerformanceOptimizer extends EventEmitter {
     // Memory monitoring
     if ('memory' in performance) {
       this.memoryMonitor = setInterval(() => {
-        const memory = (performance as any).memory;
+        const memory = (performance as unknown as { memory: { usedJSHeapSize: number; totalJSHeapSize: number; jsHeapSizeLimit: number } }).memory;
         this.emit('memoryUpdate', {
           used: memory.usedJSHeapSize,
           total: memory.totalJSHeapSize,
@@ -619,7 +619,7 @@ export class PerformanceOptimizer extends EventEmitter {
   }
 
   private getMemoryUsage(): MemoryUsage {
-    const memory = (performance as any).memory;
+    const memory = (performance as { memory?: { usedJSHeapSize?: number; totalJSHeapSize?: number; jsHeapSizeLimit?: number } }).memory;
     const used = memory?.usedJSHeapSize || 0;
     const total = memory?.totalJSHeapSize || 0;
     const limit = memory?.jsHeapSizeLimit || 0;
@@ -791,10 +791,10 @@ export class PerformanceOptimizer extends EventEmitter {
 
   private getMetricValue(metric: string, metrics: PerformanceMetrics): number | undefined {
     const parts = metric.split('.');
-    let value: any = metrics;
+    let value: unknown = metrics;
     
     for (const part of parts) {
-      value = value?.[part];
+      value = (value as Record<string, unknown>)?.[part];
     }
     
     return typeof value === 'number' ? value : undefined;
@@ -904,7 +904,7 @@ export class PerformanceOptimizer extends EventEmitter {
   }
 
   // Cache Management
-  public cacheData(key: string, data: any, options: Partial<CacheEntry> = {}): void {
+  public cacheData(key: string, data: unknown, options: Partial<CacheEntry> = {}): void {
     const size = this.estimateDataSize(data);
     
     // Check cache size limit
@@ -932,7 +932,7 @@ export class PerformanceOptimizer extends EventEmitter {
     this.emit('dataCached', { key, size });
   }
 
-  public getCachedData(key: string): any {
+  public getCachedData(key: string): unknown {
     const entry = this.cache.get(key);
     if (!entry) return null;
     
@@ -979,7 +979,7 @@ export class PerformanceOptimizer extends EventEmitter {
   }
 
   // Worker Pool Management
-  public async executeTask(poolId: string, type: string, data: any, priority: number = 1): Promise<any> {
+  public async executeTask(poolId: string, type: string, data: unknown, priority: number = 1): Promise<unknown> {
     const pool = this.workerPools.get(poolId);
     if (!pool) {
       throw new Error(`Worker pool ${poolId} not found`);
@@ -1008,8 +1008,8 @@ export class PerformanceOptimizer extends EventEmitter {
   private processWorkerQueue(
     pool: WorkerPool, 
     task: WorkerTask, 
-    resolve: (value: any) => void, 
-    reject: (reason: any) => void
+    resolve: (value: unknown) => void, 
+    reject: (reason: unknown) => void
   ): void {
     // Find available worker
     const availableWorker = pool.workers.find(_worker => {
@@ -1075,12 +1075,12 @@ export class PerformanceOptimizer extends EventEmitter {
   }
 
   // Optimization Actions
-  private async reduceRenderQuality(params: any): Promise<void> {
+  private async reduceRenderQuality(params: Record<string, unknown>): Promise<void> {
     console.log('Reducing render quality:', params);
     this.emit('qualityReduced', params);
   }
 
-  private async compressData(params: any): Promise<void> {
+  private async compressData(params: Record<string, unknown>): Promise<void> {
     console.log('Compressing data:', params);
     
     // Compress cache entries
@@ -1101,12 +1101,12 @@ export class PerformanceOptimizer extends EventEmitter {
     this.emit('dataCompressed', params);
   }
 
-  private async offloadFromGPU(params: any): Promise<void> {
+  private async offloadFromGPU(params: Record<string, unknown>): Promise<void> {
     console.log('Offloading from GPU:', params);
     this.emit('gpuOffloaded', params);
   }
 
-  private async limitNetworkConnections(params: any): Promise<void> {
+  private async limitNetworkConnections(params: Record<string, unknown>): Promise<void> {
     console.log('Limiting network connections:', params);
     this.emit('connectionsLimited', params);
   }
@@ -1123,12 +1123,12 @@ export class PerformanceOptimizer extends EventEmitter {
     this.emit('garbageCollected');
   }
 
-  private async reducePrecision(params: any): Promise<void> {
+  private async reducePrecision(params: Record<string, unknown>): Promise<void> {
     console.log('Reducing precision:', params);
     this.emit('precisionReduced', params);
   }
 
-  private async enableLevelOfDetail(params: any): Promise<void> {
+  private async enableLevelOfDetail(params: Record<string, unknown>): Promise<void> {
     console.log('Enabling level of detail:', params);
     this.emit('lodEnabled', params);
   }
@@ -1154,7 +1154,7 @@ export class PerformanceOptimizer extends EventEmitter {
     return '2.0';
   }
 
-  private estimateDataSize(data: any): number {
+  private estimateDataSize(data: unknown): number {
     try {
       return JSON.stringify(data).length * 2; // Rough estimate
     } catch {
@@ -1396,7 +1396,7 @@ export class PerformanceOptimizer extends EventEmitter {
     return this.gpuAcceleration;
   }
 
-  public setMemoryManager(memoryManager: any): void {
+  public setMemoryManager(memoryManager: unknown): void {
     // Store reference to memory manager for integration
     console.log('✅ Memory manager integrated with Performance Optimizer');
     this.emit('memoryManagerSet', memoryManager);

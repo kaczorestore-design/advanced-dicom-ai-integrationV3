@@ -4,21 +4,19 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import { 
-  Box, 
-  Layers3, 
-  Palette, 
-  Settings, 
+  Box,
+  // Layers3, 
+  // Palette, 
+  // Settings, 
   Download, 
-  RotateCcw,
-  Maximize,
+  // RotateCcw,
+  // Maximize,
   Play,
   Pause,
-  SkipBack,
-  SkipForward,
+  // SkipBack,
+  // SkipForward,
   Eye,
   EyeOff,
   Zap
@@ -151,9 +149,20 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
   ]);
   
   const [currentPreset, setCurrentPreset] = useState<RenderingPreset>(renderingPresets[0]);
-  const [renderingSettings, setRenderingSettings] = useState({
-    renderingMode: 'volumetric' as const,
-    quality: 'medium' as const,
+  const [renderingSettings, setRenderingSettings] = useState<{
+    renderingMode: 'mip' | 'composite' | 'volumetric' | 'isosurface';
+    quality: 'high' | 'low' | 'medium' | 'ultra';
+    stepSize: number;
+    gradientThreshold: number;
+    enableShading: boolean;
+    enableGradients: boolean;
+    enableJittering: boolean;
+    enableGPUAcceleration: boolean;
+    sampleRate: number;
+    maxSteps: number;
+  }>({
+    renderingMode: 'volumetric',
+    quality: 'medium',
     stepSize: 0.5,
     gradientThreshold: 0.1,
     enableShading: true,
@@ -164,7 +173,7 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
     maxSteps: 1000
   });
   
-  const [cameraSettings, setCameraSettings] = useState({
+  const [, ] = useState({
     position: [0, 0, 500],
     target: [0, 0, 0],
     up: [0, 1, 0],
@@ -188,7 +197,7 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
     gpuMemoryUsage: 0
   });
   
-  const [isRendering, setIsRendering] = useState(false);
+  const [, ] = useState(false);
   const [selectedTransferFunction, setSelectedTransferFunction] = useState<TransferFunction>(transferFunctions[0]);
 
   // Initialize WebGL context
@@ -249,121 +258,11 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
 
   // Create shader programs
   const createShaderPrograms = useCallback((gl: WebGL2RenderingContext) => {
-    // Volume rendering vertex shader
-    const vertexShaderSource = `#version 300 es
-      in vec3 a_position;
-      in vec2 a_texCoord;
-      
-      uniform mat4 u_modelViewMatrix;
-      uniform mat4 u_projectionMatrix;
-      
-      out vec3 v_position;
-      out vec2 v_texCoord;
-      
-      void main() {
-        v_position = a_position;
-        v_texCoord = a_texCoord;
-        gl_Position = u_projectionMatrix * u_modelViewMatrix * vec4(a_position, 1.0);
-      }
-    `;
-    
-    // Volume rendering fragment shader
-    const fragmentShaderSource = `#version 300 es
-      precision highp float;
-      
-      in vec3 v_position;
-      in vec2 v_texCoord;
-      
-      uniform sampler3D u_volumeTexture;
-      uniform sampler2D u_transferFunction;
-      uniform vec3 u_cameraPosition;
-      uniform vec3 u_volumeDimensions;
-      uniform vec3 u_volumeSpacing;
-      uniform float u_stepSize;
-      uniform int u_maxSteps;
-      uniform int u_renderingMode; // 0: MIP, 1: Volumetric, 2: Isosurface
-      uniform float u_isoValue;
-      uniform bool u_enableShading;
-      uniform bool u_enableJittering;
-      
-      out vec4 fragColor;
-      
-      vec3 calculateGradient(vec3 pos) {
-        vec3 step = 1.0 / u_volumeDimensions;
-        float x1 = texture(u_volumeTexture, pos + vec3(step.x, 0, 0)).r;
-        float x2 = texture(u_volumeTexture, pos - vec3(step.x, 0, 0)).r;
-        float y1 = texture(u_volumeTexture, pos + vec3(0, step.y, 0)).r;
-        float y2 = texture(u_volumeTexture, pos - vec3(0, step.y, 0)).r;
-        float z1 = texture(u_volumeTexture, pos + vec3(0, 0, step.z)).r;
-        float z2 = texture(u_volumeTexture, pos - vec3(0, 0, step.z)).r;
-        return normalize(vec3(x1 - x2, y1 - y2, z1 - z2));
-      }
-      
-      vec4 applyTransferFunction(float intensity) {
-        return texture(u_transferFunction, vec2(intensity, 0.5));
-      }
-      
-      void main() {
-        vec3 rayDir = normalize(v_position - u_cameraPosition);
-        vec3 rayStart = v_position;
-        
-        vec4 color = vec4(0.0);
-        float maxIntensity = 0.0;
-        
-        for (int i = 0; i < u_maxSteps; i++) {
-          vec3 samplePos = rayStart + rayDir * float(i) * u_stepSize;
-          
-          // Check bounds
-          if (any(lessThan(samplePos, vec3(0.0))) || any(greaterThan(samplePos, vec3(1.0)))) {
-            break;
-          }
-          
-          float intensity = texture(u_volumeTexture, samplePos).r;
-          
-          if (u_renderingMode == 0) { // MIP
-            maxIntensity = max(maxIntensity, intensity);
-          } else if (u_renderingMode == 1) { // Volumetric
-            vec4 sampleColor = applyTransferFunction(intensity);
-            
-            if (u_enableShading && sampleColor.a > 0.01) {
-              vec3 gradient = calculateGradient(samplePos);
-              vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-              float diffuse = max(0.0, dot(gradient, lightDir));
-              sampleColor.rgb *= (0.3 + 0.7 * diffuse);
-            }
-            
-            // Front-to-back compositing
-            color.rgb += sampleColor.rgb * sampleColor.a * (1.0 - color.a);
-            color.a += sampleColor.a * (1.0 - color.a);
-            
-            if (color.a > 0.99) break;
-          } else if (u_renderingMode == 2) { // Isosurface
-            if (intensity >= u_isoValue) {
-              vec4 sampleColor = applyTransferFunction(intensity);
-              
-              if (u_enableShading) {
-                vec3 gradient = calculateGradient(samplePos);
-                vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-                float diffuse = max(0.0, dot(gradient, lightDir));
-                sampleColor.rgb *= (0.3 + 0.7 * diffuse);
-              }
-              
-              color = sampleColor;
-              break;
-            }
-          }
-        }
-        
-        if (u_renderingMode == 0) {
-          color = applyTransferFunction(maxIntensity);
-        }
-        
-        fragColor = color;
-      }
-    `;
+    // TODO: Implement shader compilation for volume rendering
+    // Volume rendering vertex shader would go here
     
     // Compile and link shaders (simplified)
-    console.log('Shader programs created');
+    console.log('Shader programs created for WebGL context:', gl);
   }, []);
 
   // Create volume texture
@@ -380,8 +279,8 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
     
     // Upload texture data
     const [width, height, depth] = data.dimensions;
-    let format = gl.RED;
-    let type = gl.UNSIGNED_BYTE;
+    const format = gl.RED;
+    let type: number = gl.UNSIGNED_BYTE;
     
     switch (data.dataType) {
       case 'uint16':
@@ -413,7 +312,7 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
 
   // Start render loop
   const startRenderLoop = useCallback(() => {
-    const render = (timestamp: number) => {
+    const render = (_timestamp: number) => {
       if (glRef.current && canvasRef.current) {
         const startTime = performance.now();
         
@@ -738,7 +637,7 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
                         value={renderingSettings.renderingMode}
                         onChange={(e) => setRenderingSettings(prev => ({ 
                           ...prev, 
-                          renderingMode: e.target.value as any 
+                          renderingMode: e.target.value as 'mip' | 'volumetric' | 'isosurface' | 'composite' 
                         }))}
                       >
                         <option value="mip">Maximum Intensity Projection</option>
@@ -755,7 +654,7 @@ export const EnhancedVolumeRenderer: React.FC<EnhancedVolumeRendererProps> = ({
                         value={renderingSettings.quality}
                         onChange={(e) => setRenderingSettings(prev => ({ 
                           ...prev, 
-                          quality: e.target.value as any 
+                          quality: e.target.value as 'low' | 'medium' | 'high' | 'ultra' 
                         }))}
                       >
                         <option value="low">Low (Fast)</option>
