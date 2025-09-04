@@ -48,7 +48,7 @@ export const DICOMProtocolTester: React.FC = () => {
         };
 
         setTestResults(prev => [...prev, result]);
-      } catch {
+      } catch (error) {
         const duration = Date.now() - startTime;
         const result: TestResult = {
           protocol: test.protocol,

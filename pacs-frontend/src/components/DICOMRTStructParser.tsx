@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import * as dicomParser from 'dicom-parser';
-import * as cornerstone from 'cornerstone-core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Slider } from './ui/slider';
-import { Switch } from './ui/switch';
-import { Eye, EyeOff, Palette, Download, Upload, Target, Zap } from 'lucide-react';
+import { Eye, EyeOff, Upload, Target, Zap } from 'lucide-react';
 
 interface RTStructureSet {
   structureSetLabel: string;
@@ -90,7 +88,7 @@ export default function DICOMRTStructParser({
           const referencedFrameOfReferenceSequence = dataSet.elements.x30060010;
           let referencedFrameOfReferenceUID = '';
           if (referencedFrameOfReferenceSequence && referencedFrameOfReferenceSequence.items?.[0]) {
-            referencedFrameOfReferenceUID = referencedFrameOfReferenceSequence.items[0].dataSet.string('x00200052') || '';
+            referencedFrameOfReferenceUID = referencedFrameOfReferenceSequence.items[0]?.dataSet?.string('x00200052') || '';
           }
 
           // Extract ROI Contour Sequence
@@ -98,13 +96,14 @@ export default function DICOMRTStructParser({
           const contoursByROI = new Map<number, RTContour[]>();
           const colorsByROI = new Map<number, [number, number, number]>();
 
-          if (roiContourSequence && roiContourSequence.items) {
-            roiContourSequence.items.forEach((item: any) => {
-              const referencedROINumber = item.dataSet.uint16('x30060084');
+          if (roiContourSequence && (roiContourSequence as unknown as Record<string, unknown> & { items?: Record<string, unknown>[] }).items) {
+            (roiContourSequence as unknown as Record<string, unknown> & { items: Record<string, unknown>[] }).items.forEach((item: Record<string, unknown>) => {
+              const itemDataSet = item.dataSet as Record<string, unknown> & { uint16(tag: string): number; string(tag: string): string; elements: Record<string, unknown> };
+              const referencedROINumber = itemDataSet.uint16('x30060084');
               if (!referencedROINumber) return;
 
               // Extract ROI display color
-              const roiDisplayColorString = item.dataSet.string('x3006002a');
+              const roiDisplayColorString = itemDataSet.string('x3006002a');
               let roiColor: [number, number, number] = [255, 255, 0]; // Default yellow
               if (roiDisplayColorString) {
                 const colorValues = roiDisplayColorString.split('\\').map(Number);
@@ -115,23 +114,24 @@ export default function DICOMRTStructParser({
               colorsByROI.set(referencedROINumber, roiColor);
 
               // Extract contour sequence
-              const contourSequence = item.dataSet.elements.x30060040;
+              const contourSequence = itemDataSet.elements.x30060040;
               const contours: RTContour[] = [];
 
-              if (contourSequence && contourSequence.items) {
-                contourSequence.items.forEach((contourItem: any, contourIndex: number) => {
-                  const contourGeometricType = contourItem.dataSet.string('x30060042') || 'CLOSED_PLANAR';
-                  const numberOfContourPoints = contourItem.dataSet.uint16('x30060046') || 0;
-                  const contourDataString = contourItem.dataSet.string('x30060050');
+              if (contourSequence && (contourSequence as Record<string, unknown> & { items?: Record<string, unknown>[] }).items) {
+                (contourSequence as Record<string, unknown> & { items: Record<string, unknown>[] }).items.forEach((contourItem: Record<string, unknown>, contourIndex: number) => {
+                  const contourItemDataSet = contourItem.dataSet as Record<string, unknown> & { string(tag: string): string; uint16(tag: string): number; elements: Record<string, unknown> };
+                  const contourGeometricType = contourItemDataSet.string('x30060042') || 'CLOSED_PLANAR';
+                  const numberOfContourPoints = contourItemDataSet.uint16('x30060046') || 0;
+                  const contourDataString = contourItemDataSet.string('x30060050');
 
                   if (contourDataString && numberOfContourPoints > 0) {
                     const contourData = contourDataString.split('\\').map(Number);
                     
                     // Extract referenced SOP instance UID if available
-                    const contourImageSequence = contourItem.dataSet.elements.x30060016;
+                    const contourImageSequence = contourItemDataSet.elements.x30060016;
                     let referencedSOPInstanceUID = '';
-                    if (contourImageSequence && contourImageSequence.items?.[0]) {
-                      referencedSOPInstanceUID = contourImageSequence.items[0].dataSet.string('x00081155') || '';
+                    if (contourImageSequence && (contourImageSequence as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items?.[0]) {
+                      referencedSOPInstanceUID = (contourImageSequence as Record<string, unknown> & { items: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items[0].dataSet.string('x00081155') || '';
                     }
 
                     // Calculate slice position (Z coordinate of first point)
@@ -157,12 +157,13 @@ export default function DICOMRTStructParser({
           const structureSetROISequence = dataSet.elements.x30060020;
           const structures: RTStructure[] = [];
 
-          if (structureSetROISequence && structureSetROISequence.items) {
-            structureSetROISequence.items.forEach((item: any) => {
-              const roiNumber = item.dataSet.uint16('x30060022');
-              const roiName = item.dataSet.string('x30060026') || `ROI ${roiNumber}`;
-              const roiDescription = item.dataSet.string('x30060028');
-              const roiGenerationAlgorithm = item.dataSet.string('x3006002c');
+          if (structureSetROISequence && (structureSetROISequence as unknown as Record<string, unknown> & { items?: Record<string, unknown>[] }).items) {
+            (structureSetROISequence as unknown as Record<string, unknown> & { items: Record<string, unknown>[] }).items.forEach((item: Record<string, unknown>) => {
+              const itemDataSet = item.dataSet as Record<string, unknown> & { uint16(tag: string): number; string(tag: string): string };
+              const roiNumber = itemDataSet.uint16('x30060022');
+              const roiName = itemDataSet.string('x30060026') || `ROI ${roiNumber}`;
+              const roiDescription = itemDataSet.string('x30060028');
+              const roiGenerationAlgorithm = itemDataSet.string('x3006002c');
 
               if (roiNumber) {
                 const contours = contoursByROI.get(roiNumber) || [];
@@ -186,13 +187,12 @@ export default function DICOMRTStructParser({
 
           // Extract RT ROI Observations Sequence for additional metadata
           const rtROIObservationsSequence = dataSet.elements.x30060080;
-          if (rtROIObservationsSequence && rtROIObservationsSequence.items) {
-            rtROIObservationsSequence.items.forEach((item: any) => {
-              const observationNumber = item.dataSet.uint16('x30060082');
-              const referencedROINumber = item.dataSet.uint16('x30060084');
-              const roiObservationLabel = item.dataSet.string('x30060085');
-              const rtROIInterpretedType = item.dataSet.string('x300600a4');
-              const roiInterpreter = item.dataSet.string('x300600a6');
+          if (rtROIObservationsSequence && (rtROIObservationsSequence as unknown as Record<string, unknown> & { items?: Record<string, unknown>[] }).items) {
+            (rtROIObservationsSequence as unknown as Record<string, unknown> & { items: Record<string, unknown>[] }).items.forEach((item: Record<string, unknown>) => {
+              const itemDataSet = item.dataSet as Record<string, unknown> & { uint16(tag: string): number; string(tag: string): string };
+              const referencedROINumber = itemDataSet.uint16('x30060084');
+              const roiObservationLabel = itemDataSet.string('x30060085');
+              const rtROIInterpretedType = itemDataSet.string('x300600a4');
 
               // Update structure with observation data
               const structure = structures.find(s => s.roiNumber === referencedROINumber);
@@ -308,28 +308,6 @@ export default function DICOMRTStructParser({
     setSelectedStructures(newSelection);
   }, [selectedStructures]);
 
-  // Generate contour overlay for cornerstone
-  const generateContourOverlay = useCallback((roiNumber: number, slicePosition: number, tolerance: number = 1.0) => {
-    if (!rtStructData) return null;
-
-    const structure = rtStructData.structures.find(s => s.roiNumber === roiNumber);
-    if (!structure || !structure.visible) return null;
-
-    // Find contours for this slice position
-    const relevantContours = structure.contours.filter(contour => 
-      Math.abs((contour.slicePosition || 0) - slicePosition) <= tolerance
-    );
-
-    if (relevantContours.length === 0) return null;
-
-    return {
-      contours: relevantContours,
-      color: structure.roiColor,
-      opacity: structure.opacity,
-      filled: structure.filled,
-      thickness: structure.thickness
-    };
-  }, [rtStructData]);
 
   return (
     <div className={`space-y-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>

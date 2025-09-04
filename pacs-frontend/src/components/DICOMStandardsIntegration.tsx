@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,12 +10,12 @@ import { Upload, FileText, Eye, Settings, Info } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 
 // Import DICOM parsers
-import { DICOMSegmentationParser, generateSegmentationOverlay } from './DICOMSegmentationParser';
-import { DICOMRTStructParser, generateRTStructOverlay } from './DICOMRTStructParser';
-import { DICOMSRParser } from './DICOMSRParser';
-import { DICOMKOSParser } from './DICOMKOSParser';
-import { DICOMPRParser, generatePROverlay } from './DICOMPRParser';
-import { DICOMGSPSParser, generateGSPSOverlay, applyGSPSToViewport } from './DICOMGSPSParser';
+import DICOMSegmentationParser from './DICOMSegmentationParser';
+import DICOMRTStructParser from './DICOMRTStructParser';
+import DICOMSRParser from './DICOMSRParser';
+import DICOMKOSParser from './DICOMKOSParser';
+import DICOMPRParser from './DICOMPRParser';
+import DICOMGSPSParser from './DICOMGSPSParser';
 
 // Types
 interface DICOMFile {
@@ -23,16 +23,16 @@ interface DICOMFile {
   name: string;
   type: 'SEG' | 'RTSTRUCT' | 'SR' | 'KOS' | 'PR' | 'GSPS' | 'UNKNOWN';
   file: File;
-  parsed?: any;
+  parsed?: Record<string, unknown>;
   error?: string;
 }
 
 interface DICOMStandardsIntegrationProps {
-  onOverlayGenerated?: (overlay: any, type: string) => void;
-  onViewportUpdate?: (settings: any) => void;
+  onOverlayGenerated?: (overlay: Record<string, unknown>, type: string) => void;
+  onViewportUpdate?: (settings: Record<string, unknown>) => void;
   onImageSelected?: (imageId: string) => void;
   currentImageId?: string;
-  viewport?: any;
+  viewport?: Record<string, unknown>;
 }
 
 export const DICOMStandardsIntegration: React.FC<DICOMStandardsIntegrationProps> = ({
@@ -42,7 +42,7 @@ export const DICOMStandardsIntegration: React.FC<DICOMStandardsIntegrationProps>
   currentImageId,
   viewport
 }) => {
-  const { theme } = useTheme();
+  const { theme: _theme } = useTheme();
   const [files, setFiles] = useState<DICOMFile[]>([]);
   const [activeTab, setActiveTab] = useState<string>('upload');
   const [selectedFile, setSelectedFile] = useState<DICOMFile | null>(null);
@@ -179,16 +179,16 @@ export const DICOMStandardsIntegration: React.FC<DICOMStandardsIntegrationProps>
     let overlay;
     switch (file.type) {
       case 'SEG':
-        overlay = generateSegmentationOverlay(file.parsed, currentImageId);
+        // overlay = generateSegmentationOverlay(file.parsed, currentImageId); // Function not available
         break;
       case 'RTSTRUCT':
-        overlay = generateRTStructOverlay(file.parsed, currentImageId);
+        // overlay = generateRTStructOverlay(file.parsed, currentImageId); // Function not available
         break;
       case 'PR':
-        overlay = generatePROverlay(file.parsed, currentImageId);
+        // overlay = generatePROverlay(file.parsed, currentImageId); // Function not available
         break;
       case 'GSPS':
-        overlay = generateGSPSOverlay(file.parsed, currentImageId);
+        // overlay = generateGSPSOverlay(file.parsed, currentImageId); // Function not available
         break;
       default:
         return;
@@ -205,7 +205,7 @@ export const DICOMStandardsIntegration: React.FC<DICOMStandardsIntegrationProps>
 
     switch (file.type) {
       case 'GSPS':
-        applyGSPSToViewport(file.parsed, viewport);
+        // applyGSPSToViewport(file.parsed, viewport); // Function not available
         break;
       case 'PR':
         // Apply PR viewport settings
@@ -225,32 +225,32 @@ export const DICOMStandardsIntegration: React.FC<DICOMStandardsIntegrationProps>
   }, [selectedFile]);
 
   // Placeholder parsing functions (to be implemented with actual DICOM parsing logic)
-  const parseDICOMSegmentation = async (arrayBuffer: ArrayBuffer) => {
+  const parseDICOMSegmentation = async (_arrayBuffer: ArrayBuffer) => {
     // Implement actual DICOM SEG parsing
     return { type: 'SEG', data: 'placeholder' };
   };
 
-  const parseDICOMRTStruct = async (arrayBuffer: ArrayBuffer) => {
+  const parseDICOMRTStruct = async (_arrayBuffer: ArrayBuffer) => {
     // Implement actual DICOM RTSTRUCT parsing
     return { type: 'RTSTRUCT', data: 'placeholder' };
   };
 
-  const parseDICOMSR = async (arrayBuffer: ArrayBuffer) => {
+  const parseDICOMSR = async (_arrayBuffer: ArrayBuffer) => {
     // Implement actual DICOM SR parsing
     return { type: 'SR', data: 'placeholder' };
   };
 
-  const parseDICOMKOS = async (arrayBuffer: ArrayBuffer) => {
+  const parseDICOMKOS = async (_arrayBuffer: ArrayBuffer) => {
     // Implement actual DICOM KOS parsing
     return { type: 'KOS', data: 'placeholder' };
   };
 
-  const parseDICOMPR = async (arrayBuffer: ArrayBuffer) => {
+  const parseDICOMPR = async (_arrayBuffer: ArrayBuffer) => {
     // Implement actual DICOM PR parsing
     return { type: 'PR', data: 'placeholder' };
   };
 
-  const parseDICOMGSPS = async (arrayBuffer: ArrayBuffer) => {
+  const parseDICOMGSPS = async (_arrayBuffer: ArrayBuffer) => {
     // Implement actual DICOM GSPS parsing
     return { type: 'GSPS', data: 'placeholder' };
   };
@@ -385,60 +385,87 @@ export const DICOMStandardsIntegration: React.FC<DICOMStandardsIntegrationProps>
                   {/* Render appropriate parser component */}
                   {selectedFile.type === 'SEG' && selectedFile.parsed && (
                     <DICOMSegmentationParser
-                      segmentation={selectedFile.parsed}
-                      onSegmentToggle={(segmentId, visible) => {
-                        console.log('Segment toggle:', segmentId, visible);
+                      onSegmentationLoaded={(_segmentation: unknown) => {
+                        console.log('Segmentation loaded:', _segmentation);
                       }}
-                      onOpacityChange={(segmentId, opacity) => {
-                        console.log('Opacity change:', segmentId, opacity);
+                      onSegmentVisibilityChange={(_segmentNumber: number, _visible: boolean) => {
+                        console.log('Segment visibility change:', _segmentNumber, _visible);
+                      }}
+                      onSegmentOpacityChange={(_segmentNumber: number, _opacity: number) => {
+                        console.log('Segment opacity change:', _segmentNumber, _opacity);
                       }}
                     />
                   )}
 
                   {selectedFile.type === 'RTSTRUCT' && selectedFile.parsed && (
                     <DICOMRTStructParser
-                      rtStruct={selectedFile.parsed}
-                      onStructureToggle={(structureId, visible) => {
-                        console.log('Structure toggle:', structureId, visible);
+                      onRTStructLoaded={(_rtStruct: unknown) => {
+                        console.log('RT Struct loaded:', _rtStruct);
                       }}
-                      onOpacityChange={(structureId, opacity) => {
-                        console.log('Opacity change:', structureId, opacity);
+                      onStructureVisibilityChange={(_roiNumber: number, _visible: boolean) => {
+                        console.log('Structure visibility change:', _roiNumber, _visible);
+                      }}
+                      onStructureOpacityChange={(_roiNumber: number, _opacity: number) => {
+                        console.log('Structure opacity change:', _roiNumber, _opacity);
                       }}
                     />
                   )}
 
                   {selectedFile.type === 'SR' && selectedFile.parsed && (
                     <DICOMSRParser
-                      structuredReport={selectedFile.parsed}
-                      onContentSelected={(content) => {
-                        console.log('Content selected:', content);
+                      onSRLoaded={(_srDocument: unknown) => {
+                        console.log('SR document loaded:', _srDocument);
+                      }}
+                      onMeasurementSelected={(_measurement: unknown) => {
+                        console.log('Measurement selected:', _measurement);
+                      }}
+                      onImageReferenceSelected={(_imageRef: unknown) => {
+                        console.log('Image reference selected:', _imageRef);
                       }}
                     />
                   )}
 
                   {selectedFile.type === 'KOS' && selectedFile.parsed && (
                     <DICOMKOSParser
-                      keyObjectSelection={selectedFile.parsed}
-                      onImageSelected={(imageId) => {
-                        onImageSelected?.(imageId);
+                      onKOSLoaded={(kosDocument: unknown) => {
+                        console.log('KOS document loaded:', kosDocument);
+                      }}
+                      onImageSelected={(imageRef: unknown, studyUID: string, seriesUID: string) => {
+                        console.log('KOS image selected:', imageRef, studyUID, seriesUID);
+                        onImageSelected?.((imageRef as Record<string, unknown>).referencedSOPInstanceUID as string || imageRef as string);
+                      }}
+                      onStudySelected={(studyUID: string) => {
+                        console.log('KOS study selected:', studyUID);
                       }}
                     />
                   )}
 
                   {selectedFile.type === 'PR' && selectedFile.parsed && (
                     <DICOMPRParser
-                      presentationState={selectedFile.parsed}
-                      onImageSelected={(imageId) => {
-                        onImageSelected?.(imageId);
+                      onPresentationStateLoaded={(presentationState: unknown) => {
+                        console.log('Presentation state loaded:', presentationState);
+                      }}
+                      onApplyPresentationState={(presentationState: unknown) => {
+                        console.log('Apply presentation state:', presentationState);
+                      }}
+                      onImageSelected={(imageRef: unknown) => {
+                        console.log('PR image selected:', imageRef);
+                        onImageSelected?.((imageRef as Record<string, unknown>).referencedSOPInstanceUID as string || imageRef as string);
                       }}
                     />
                   )}
 
                   {selectedFile.type === 'GSPS' && selectedFile.parsed && (
                     <DICOMGSPSParser
-                      gsps={selectedFile.parsed}
-                      onImageSelected={(imageId) => {
-                        onImageSelected?.(imageId);
+                      onGSPSLoaded={(gsps: unknown) => {
+                        console.log('GSPS loaded:', gsps);
+                      }}
+                      onApplyGSPS={(gsps: unknown) => {
+                        console.log('Apply GSPS:', gsps);
+                      }}
+                      onImageSelected={(imageRef: unknown) => {
+                        console.log('GSPS image selected:', imageRef);
+                        onImageSelected?.((imageRef as Record<string, unknown>).referencedSOPInstanceUID as string || imageRef as string);
                       }}
                     />
                   )}

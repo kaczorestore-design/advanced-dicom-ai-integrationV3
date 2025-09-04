@@ -1,73 +1,32 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Button,
-  Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Textarea,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTab,
-  Badge,
-  Label,
-  Checkbox,
-  RadioGroup,
-  RadioGroupItem,
-  Progress,
-  Alert,
-  AlertDescription,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Separator
-} from '../ui';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Textarea } from '../ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Badge } from '../ui/badge';
+import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
+import { Alert, AlertDescription } from '../ui/alert';
 import {
   FileText,
   Save,
   Send,
   Download,
-  Upload,
   Eye,
   Edit,
-  Copy,
-  Trash2,
-  Plus,
-  Search,
-  Filter,
-  RefreshCw,
-  Settings,
   Mic,
-  MicOff,
   Play,
-  Pause,
   Square,
-  Volume2,
   Clock,
-  User,
-  Calendar,
   CheckCircle,
   AlertCircle,
-  XCircle,
   Printer,
-  Mail,
   Share,
-  History,
-  Template,
-  Zap
+  Zap,
+  FileText as FileTemplate,
+  RefreshCw
 } from 'lucide-react';
 
 // Types
@@ -175,12 +134,12 @@ const ReportGeneration: React.FC = () => {
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [macros, setMacros] = useState<ReportMacro[]>([]);
   const [currentReport, setCurrentReport] = useState<Report | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [_selectedTemplate, _setSelectedTemplate] = useState<ReportTemplate | null>(null);
+  const [_loading, _setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('reports');
-  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
-  const [showMacroDialog, setShowMacroDialog] = useState(false);
+  const [_showTemplateDialog, _setShowTemplateDialog] = useState(false);
+  const [_showMacroDialog, _setShowMacroDialog] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [voiceRecording, setVoiceRecording] = useState<VoiceRecording | null>(null);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
@@ -196,16 +155,16 @@ const ReportGeneration: React.FC = () => {
 
   // Load reports
   const loadReports = useCallback(async () => {
-    setLoading(true);
+    _setLoading(true);
     try {
       const response = await fetch('/api/reports');
       if (!response.ok) throw new Error('Failed to load reports');
       const data = await response.json();
       setReports(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+    } catch (_err) {
+      setError(_err instanceof Error ? (_err as Error).message : 'Unknown error');
     } finally {
-      setLoading(false);
+      _setLoading(false);
     }
   }, []);
 
@@ -216,8 +175,8 @@ const ReportGeneration: React.FC = () => {
       if (!response.ok) throw new Error('Failed to load templates');
       const data = await response.json();
       setTemplates(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load templates');
+    } catch (_err) {
+      setError(_err instanceof Error ? (_err as Error).message : 'Failed to load templates');
     }
   }, []);
 
@@ -228,8 +187,8 @@ const ReportGeneration: React.FC = () => {
       if (!response.ok) throw new Error('Failed to load macros');
       const data = await response.json();
       setMacros(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load macros');
+    } catch (_err) {
+      setError(_err instanceof Error ? (_err as Error).message : 'Failed to load macros');
     }
   }, []);
 
@@ -243,8 +202,8 @@ const ReportGeneration: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(report)
       });
-    } catch (err) {
-      console.error('Auto-save failed:', err);
+    } catch (_err) {
+      console.error('Auto-save failed:', _err);
     }
   }, [autoSaveEnabled]);
 
@@ -306,7 +265,7 @@ const ReportGeneration: React.FC = () => {
             audioUrl,
             createdAt: new Date().toISOString()
           });
-        } catch (err) {
+        } catch (_err) {
           setError('Transcription failed');
         }
       };
@@ -314,7 +273,7 @@ const ReportGeneration: React.FC = () => {
       mediaRecorder.start();
       mediaRecorderRef.current = mediaRecorder;
       setIsRecording(true);
-    } catch (err) {
+    } catch (_err) {
       setError('Failed to start recording');
     }
   };
@@ -363,7 +322,7 @@ const ReportGeneration: React.FC = () => {
     };
 
     setCurrentReport(updatedReport);
-    setSelectedTemplate(template);
+    _setSelectedTemplate(template);
     
     // Update template usage count
     fetch(`/api/report-templates/${template.id}/usage`, { method: 'POST' });
@@ -397,8 +356,8 @@ const ReportGeneration: React.FC = () => {
 
       setCurrentReport(updatedReport);
       setReports(prev => prev.map(r => r.id === updatedReport.id ? updatedReport : r));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save report');
+    } catch (_err) {
+      setError(_err instanceof Error ? (_err as Error).message : 'Failed to save report');
     }
   };
 
@@ -419,8 +378,8 @@ const ReportGeneration: React.FC = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed');
+    } catch (_err) {
+      setError(_err instanceof Error ? (_err as Error).message : 'Export failed');
     }
   };
 
@@ -517,11 +476,11 @@ const ReportGeneration: React.FC = () => {
           <p className="text-gray-600 mt-1">Create and manage DICOM study reports</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => setShowTemplateDialog(true)} variant="outline">
-            <Template className="w-4 h-4 mr-2" />
+          <Button onClick={() => _setShowTemplateDialog(true)} variant="outline">
+            <FileTemplate className="w-4 h-4 mr-2" />
             Templates
           </Button>
-          <Button onClick={() => setShowMacroDialog(true)} variant="outline">
+          <Button onClick={() => _setShowMacroDialog(true)} variant="outline">
             <Zap className="w-4 h-4 mr-2" />
             Macros
           </Button>
@@ -542,10 +501,10 @@ const ReportGeneration: React.FC = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
-          <TabsTab value="reports">Reports</TabsTab>
-          <TabsTab value="editor">Report Editor</TabsTab>
-          <TabsTab value="templates">Templates</TabsTab>
-          <TabsTab value="analytics">Analytics</TabsTab>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+          <TabsTrigger value="editor">Report Editor</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
         {/* Reports List */}
@@ -835,7 +794,7 @@ const ReportGeneration: React.FC = () => {
                           size="sm"
                           className="w-full justify-start"
                         >
-                          <Template className="w-4 h-4 mr-2" />
+                          <FileTemplate className="w-4 h-4 mr-2" />
                           {template.name}
                         </Button>
                       ))}
@@ -877,7 +836,7 @@ const ReportGeneration: React.FC = () => {
                         <Checkbox
                           id="autosave"
                           checked={autoSaveEnabled}
-                          onCheckedChange={setAutoSaveEnabled}
+                          onCheckedChange={(checked) => setAutoSaveEnabled(checked === true)}
                         />
                         <Label htmlFor="autosave" className="text-sm">Auto-save</Label>
                       </div>

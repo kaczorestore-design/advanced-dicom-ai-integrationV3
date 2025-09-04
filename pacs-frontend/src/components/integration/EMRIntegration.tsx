@@ -8,24 +8,17 @@ import { Switch } from '@/components/ui/switch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import {
   Database,
   Link,
-  Settings,
   CheckCircle,
   AlertTriangle,
   RefreshCw,
-  Send,
-  Download,
-  Upload,
-  Shield,
-  Clock,
-  Users,
-  FileText,
   Activity,
-  Zap
+  Settings,
+  Shield,
+  Download
 } from 'lucide-react';
 
 // FHIR Resource interfaces

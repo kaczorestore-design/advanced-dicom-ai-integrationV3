@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+// import React from 'react';
 import * as cornerstone from 'cornerstone-core';
 import * as cornerstoneWADOImageLoader from 'cornerstone-wado-image-loader';
 import * as dicomParser from 'dicom-parser';
@@ -84,7 +84,7 @@ export interface DICOMQuery {
 
 export interface DICOMQueryResult {
   level: 'PATIENT' | 'STUDY' | 'SERIES' | 'IMAGE';
-  data: { [key: string]: any };
+  data: { [key: string]: unknown };
   uid: string;
   parentUID?: string;
   children?: DICOMQueryResult[];
@@ -117,9 +117,9 @@ export interface DICOMRetrievalJob {
 export interface MemoryManager {
   maxMemoryUsage: number;
   currentMemoryUsage: number;
-  imageCache: Map<string, any>;
-  metadataCache: Map<string, any>;
-  compressionCache: Map<string, any>;
+  imageCache: Map<string, unknown>;
+  metadataCache: Map<string, unknown>;
+  compressionCache: Map<string, unknown>;
   enableGarbageCollection: boolean;
   gcThreshold: number;
   enableImagePooling: boolean;
@@ -150,10 +150,10 @@ export class EnhancedDICOMNetwork extends EventEmitter {
   private networkOptimizer: NetworkOptimizer;
   private isInitialized = false;
   private workerPool: Worker[] = [];
-  private requestQueue: any[] = [];
-  private connectionPool: Map<string, any[]> = new Map();
-  private bandwidthMonitor: any;
-  private gcInterval: any;
+  private requestQueue: Record<string, unknown>[] = [];
+  private connectionPool: Map<string, Record<string, unknown>[]> = new Map();
+  private bandwidthMonitor: Record<string, unknown> = {};
+  private gcInterval: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<DICOMNetworkConfig> = {}) {
     super();
@@ -249,8 +249,8 @@ export class EnhancedDICOMNetwork extends EventEmitter {
 
   private initializeCornerstoneWADO(): void {
     // Configure WADO image loader with enhanced settings
-    cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
-    cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+    (cornerstoneWADOImageLoader as Record<string, unknown> & { external: Record<string, unknown> }).external.cornerstone = cornerstone;
+    (cornerstoneWADOImageLoader as Record<string, unknown> & { external: Record<string, unknown> }).external.dicomParser = dicomParser;
 
     // Configure web workers for parallel processing
     const config = {
@@ -266,11 +266,11 @@ export class EnhancedDICOMNetwork extends EventEmitter {
       }
     };
 
-    cornerstoneWADOImageLoader.webWorkerManager.initialize(config);
+    (cornerstoneWADOImageLoader as Record<string, unknown> & { webWorkerManager: Record<string, unknown> & { initialize(config: Record<string, unknown>): void } }).webWorkerManager.initialize(config);
 
     // Configure request interceptor for authentication and optimization
-    cornerstoneWADOImageLoader.configure({
-      beforeSend: (xhr: XMLHttpRequest, imageId: string, defaultHeaders: any, params: any) => {
+    (cornerstoneWADOImageLoader as Record<string, unknown> & { configure(options: Record<string, unknown>): void }).configure({
+      beforeSend: (xhr: XMLHttpRequest, imageId: string, _defaultHeaders: unknown, _params: unknown) => {
         // Add authentication headers
         const connection = this.getConnectionForImageId(imageId);
         if (connection) {
@@ -295,7 +295,7 @@ export class EnhancedDICOMNetwork extends EventEmitter {
           this.monitorRequest(xhr, imageId);
         }
       },
-      errorInterceptor: (error: any) => {
+      errorInterceptor: (error: unknown) => {
         console.error('WADO request error:', error);
         this.handleNetworkError(error);
         return error;
@@ -321,9 +321,9 @@ export class EnhancedDICOMNetwork extends EventEmitter {
         //   this.emit('workerError', { error: error.message });
         // };
         // this.workerPool.push(worker);
-      } catch (error) {
+      } catch (error: unknown) {
         console.warn('Failed to create worker:', error);
-        this.emit('workerError', { error: error.message });
+        this.emit('workerError', { error: error instanceof Error ? error.message : 'Unknown error' });
       }
     }
 
@@ -341,7 +341,7 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     // Monitor memory usage
     if ('memory' in performance) {
       setInterval(() => {
-        const memInfo = (performance as any).memory;
+        const memInfo = (performance as unknown as Record<string, unknown> & { memory: Record<string, unknown> & { usedJSHeapSize: number } }).memory;
         this.memoryManager.currentMemoryUsage = memInfo.usedJSHeapSize;
         
         if (this.memoryManager.currentMemoryUsage > 
@@ -519,7 +519,7 @@ export class EnhancedDICOMNetwork extends EventEmitter {
       });
       
       return response.ok;
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }
@@ -534,12 +534,12 @@ export class EnhancedDICOMNetwork extends EventEmitter {
       });
       
       return response.status !== 404; // WADO might return various status codes
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }
 
-  private async testDIMSEConnection(connection: PACSConnection): Promise<boolean> {
+  private async testDIMSEConnection(_connection: PACSConnection): Promise<boolean> {
     // DIMSE connection testing would require a DICOM library
     // For now, we'll simulate the test
     return new Promise((resolve) => {
@@ -697,10 +697,10 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     });
   }
 
-  private parseDICOMwebResults(data: any[], level: string): DICOMQueryResult[] {
+  private parseDICOMwebResults(data: Record<string, unknown>[], level: string): DICOMQueryResult[] {
     return data.map(item => {
       const result: DICOMQueryResult = {
-        level: level as any,
+        level: level as 'PATIENT' | 'STUDY' | 'SERIES' | 'IMAGE',
         uid: this.extractUID(item, level),
         data: this.extractDICOMData(item)
       };
@@ -709,23 +709,23 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     });
   }
 
-  private extractUID(item: any, level: string): string {
+  private extractUID(item: Record<string, unknown>, level: string): string {
     switch (level) {
       case 'PATIENT':
-        return item['00100020']?.Value?.[0] || ''; // Patient ID
+        return (item['00100020'] as Record<string, unknown> & { Value?: string[] })?.Value?.[0] || ''; // Patient ID
       case 'STUDY':
-        return item['0020000D']?.Value?.[0] || ''; // Study Instance UID
+        return (item['0020000D'] as Record<string, unknown> & { Value?: string[] })?.Value?.[0] || ''; // Study Instance UID
       case 'SERIES':
-        return item['0020000E']?.Value?.[0] || ''; // Series Instance UID
+        return (item['0020000E'] as Record<string, unknown> & { Value?: string[] })?.Value?.[0] || ''; // Series Instance UID
       case 'IMAGE':
-        return item['00080018']?.Value?.[0] || ''; // SOP Instance UID
+        return (item['00080018'] as Record<string, unknown> & { Value?: string[] })?.Value?.[0] || ''; // SOP Instance UID
       default:
         return '';
     }
   }
 
-  private extractDICOMData(item: any): { [key: string]: any } {
-    const data: { [key: string]: any } = {};
+  private extractDICOMData(item: Record<string, unknown>): { [key: string]: unknown } {
+    const data: { [key: string]: unknown } = {};
     
     // Extract common DICOM tags
     const tagMap: { [key: string]: string } = {
@@ -747,8 +747,9 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     };
 
     Object.entries(tagMap).forEach(([tag, name]) => {
-      if (item[tag]?.Value) {
-        data[name] = item[tag].Value[0];
+      const tagValue = item[tag] as Record<string, unknown> & { Value?: string[] };
+      if (tagValue?.Value) {
+        data[name] = tagValue.Value[0];
       }
     });
 
@@ -809,7 +810,7 @@ export class EnhancedDICOMNetwork extends EventEmitter {
       let completedBytes = 0;
 
       for (let i = 0; i < job.results.length; i++) {
-        if (job.status === 'cancelled') break;
+        if ((job as unknown as Record<string, unknown> & { status: string }).status === 'cancelled') break;
         
         const result = job.results[i];
         
@@ -901,9 +902,9 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     
     const params = new URLSearchParams({
       requestType: 'WADO',
-      studyUID: result.data.StudyInstanceUID,
-      seriesUID: result.data.SeriesInstanceUID,
-      objectUID: result.data.SOPInstanceUID,
+      studyUID: String(result.data.StudyInstanceUID || ''),
+      seriesUID: String(result.data.SeriesInstanceUID || ''),
+      objectUID: String(result.data.SOPInstanceUID || ''),
       contentType: 'application/dicom'
     });
     
@@ -965,12 +966,12 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     }
   }
 
-  private async forwardToPACS(data: ArrayBuffer, result: DICOMQueryResult, connection: PACSConnection): Promise<void> {
+  private async forwardToPACS(_data: ArrayBuffer, _result: DICOMQueryResult, connection: PACSConnection): Promise<void> {
     // Implementation for forwarding to another PACS
     console.log('Forwarding to PACS:', connection.name);
   }
 
-  private async uploadToCloud(data: ArrayBuffer, result: DICOMQueryResult, path?: string): Promise<void> {
+  private async uploadToCloud(_data: ArrayBuffer, _result: DICOMQueryResult, path?: string): Promise<void> {
     // Implementation for cloud upload
     console.log('Uploading to cloud:', path);
   }
@@ -1031,7 +1032,7 @@ export class EnhancedDICOMNetwork extends EventEmitter {
       const entries = Array.from(cache.entries());
       
       // Sort by last access time (if available) or remove oldest entries
-      entries.sort((a, b) => {
+      entries.sort((_a, _b) => {
         // Simple LRU - remove entries that haven't been accessed recently
         return Math.random() - 0.5; // Random for now, should implement proper LRU
       });
@@ -1063,12 +1064,12 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     return connections.find(conn => imageId.includes(conn.host)) || null;
   }
 
-  private monitorRequest(xhr: XMLHttpRequest, imageId: string): void {
+  private monitorRequest(xhr: XMLHttpRequest, _imageId: string): void {
     const startTime = Date.now();
-    let startBytes = 0;
+    // let startBytes = 0;
     
     xhr.addEventListener('loadstart', () => {
-      startBytes = this.bandwidthMonitor.totalBytes;
+      // startBytes = this.bandwidthMonitor.totalBytes;
     });
     
     xhr.addEventListener('loadend', () => {
@@ -1079,18 +1080,19 @@ export class EnhancedDICOMNetwork extends EventEmitter {
       if (duration > 0) {
         const bandwidth = (bytes * 8) / duration / 1000000; // Mbps
         
-        this.bandwidthMonitor.measurements.push(bandwidth);
-        this.bandwidthMonitor.totalBytes += bytes;
+        (this.bandwidthMonitor as Record<string, unknown> & { measurements: number[]; totalBytes: number }).measurements.push(bandwidth);
+        (this.bandwidthMonitor as Record<string, unknown> & { measurements: number[]; totalBytes: number }).totalBytes += bytes;
         
         // Keep only last 100 measurements
-        if (this.bandwidthMonitor.measurements.length > 100) {
-          this.bandwidthMonitor.measurements.shift();
+        if ((this.bandwidthMonitor as Record<string, unknown> & { measurements: number[] }).measurements.length > 100) {
+          (this.bandwidthMonitor as Record<string, unknown> & { measurements: number[] }).measurements.shift();
         }
         
         // Calculate average bandwidth
+        const measurements = (this.bandwidthMonitor as Record<string, unknown> & { measurements: number[] }).measurements;
         this.networkOptimizer.averageBandwidth = 
-          this.bandwidthMonitor.measurements.reduce((sum, bw) => sum + bw, 0) / 
-          this.bandwidthMonitor.measurements.length;
+          measurements.reduce((sum: number, bw: number) => sum + bw, 0) / 
+          measurements.length;
         
         this.networkOptimizer.currentBandwidth = bandwidth;
         
@@ -1102,31 +1104,33 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     });
   }
 
-  private handleNetworkError(error: any): void {
+  private handleNetworkError(error: unknown): void {
     console.error('Network error:', error);
     this.emit('networkError', error);
   }
 
-  private handleWorkerMessage(event: MessageEvent): void {
-    const { type, data, id } = event.data;
-    
-    switch (type) {
-      case 'imageProcessed':
-        this.emit('imageProcessed', { id, data });
-        break;
-      case 'error':
-        this.emit('workerError', { id, error: data });
-        break;
-    }
-  }
+  // private _handleWorkerMessage(_event: MessageEvent): void {
+  //   // const { type, data, id } = event.data;
+  //   
+  //   // switch (type) {
+  //   //   case 'imageProcessed':
+  //   //     this.emit('imageProcessed', { id, data });
+  //   //     break;
+  //   //   case 'error':
+  //   //     this.emit('workerError', { id, error: data });
+  //   //     break;
+  //   // }
+  // }
 
   private processRequestQueue(): void {
     if (this.requestQueue.length === 0) return;
     
     // Process requests based on priority
     this.requestQueue.sort((a, b) => {
-      const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
+      const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+      const aPriority = (a as Record<string, unknown> & { priority: string }).priority;
+      const bPriority = (b as Record<string, unknown> & { priority: string }).priority;
+      return priorityOrder[aPriority] - priorityOrder[bPriority];
     });
     
     // Process up to maxConcurrentConnections requests
@@ -1137,10 +1141,11 @@ export class EnhancedDICOMNetwork extends EventEmitter {
     });
   }
 
-  private async processRequest(request: any): Promise<void> {
+  private async processRequest(request: Record<string, unknown>): Promise<void> {
     // Process individual request
     try {
-      await request.execute();
+      const executableRequest = request as Record<string, unknown> & { execute(): Promise<void> };
+      await executableRequest.execute();
     } catch (error) {
       console.error('Request processing failed:', error);
     }
@@ -1175,7 +1180,7 @@ export class EnhancedDICOMNetwork extends EventEmitter {
   }
 
   private updateConnectionStatistics(): void {
-    this.connections.forEach(connection => {
+    this.connections.forEach(_connection => {
       // Update connection statistics based on recent activity
       // This is a placeholder for more sophisticated statistics tracking
     });

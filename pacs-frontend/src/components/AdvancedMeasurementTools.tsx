@@ -96,7 +96,7 @@ export class AdvancedMeasurementTools {
   private activeElement: HTMLElement | null = null;
   private config: QuantitativeAnalysisConfig;
   private aiConfig: AIAssistanceConfig;
-  private eventListeners: { [key: string]: Function[] } = {};
+  private eventListeners: { [key: string]: ((data?: unknown) => void)[] } = {};
   private isInitialized = false;
 
   constructor(
@@ -574,15 +574,15 @@ export class AdvancedMeasurementTools {
     if (!this.activeElement) return;
 
     // Listen for measurement events
-    this.activeElement.addEventListener('cornerstonetoolsmeasurementadded', (evt: any) => {
+    this.activeElement.addEventListener('cornerstonetoolsmeasurementadded', (evt: Event) => {
       this.handleMeasurementAdded(evt);
     });
 
-    this.activeElement.addEventListener('cornerstonetoolsmeasurementmodified', (evt: any) => {
+    this.activeElement.addEventListener('cornerstonetoolsmeasurementmodified', (evt: Event) => {
       this.handleMeasurementModified(evt);
     });
 
-    this.activeElement.addEventListener('cornerstonetoolsmeasurementremoved', (evt: any) => {
+    this.activeElement.addEventListener('cornerstonetoolsmeasurementremoved', (evt: Event) => {
       this.handleMeasurementRemoved(evt);
     });
   }
@@ -604,8 +604,8 @@ export class AdvancedMeasurementTools {
     }
   }
 
-  private handleMeasurementAdded(evt: any): void {
-    const measurementData = evt.detail.measurementData;
+  private handleMeasurementAdded(evt: Event): void {
+    const measurementData = (evt as CustomEvent).detail.measurementData;
     const measurement = this.createAdvancedMeasurement(measurementData);
     
     this.measurements.set(measurement.id, measurement);
@@ -621,8 +621,8 @@ export class AdvancedMeasurementTools {
     this.emit('measurementAdded', measurement);
   }
 
-  private handleMeasurementModified(evt: any): void {
-    const measurementData = evt.detail.measurementData;
+  private handleMeasurementModified(evt: Event): void {
+    const measurementData = (evt as CustomEvent).detail.measurementData;
     const existingMeasurement = this.findMeasurementByData(measurementData);
     
     if (existingMeasurement) {
@@ -637,8 +637,8 @@ export class AdvancedMeasurementTools {
     }
   }
 
-  private handleMeasurementRemoved(evt: any): void {
-    const measurementData = evt.detail.measurementData;
+  private handleMeasurementRemoved(evt: Event): void {
+    const measurementData = (evt as CustomEvent).detail.measurementData;
     const measurement = this.findMeasurementByData(measurementData);
     
     if (measurement) {
@@ -647,7 +647,7 @@ export class AdvancedMeasurementTools {
     }
   }
 
-  private createAdvancedMeasurement(measurementData: any): AdvancedMeasurement {
+  private createAdvancedMeasurement(measurementData: Record<string, unknown>): AdvancedMeasurement {
     const measurement: AdvancedMeasurement = {
       id: uuidv4(),
       type: this.determineMeasurementType(measurementData),
@@ -666,7 +666,7 @@ export class AdvancedMeasurementTools {
     return measurement;
   }
 
-  private updateAdvancedMeasurement(existing: AdvancedMeasurement, measurementData: any): AdvancedMeasurement {
+  private updateAdvancedMeasurement(existing: AdvancedMeasurement, measurementData: Record<string, unknown>): AdvancedMeasurement {
     return {
       ...existing,
       value: this.extractMeasurementValue(measurementData),
@@ -678,7 +678,7 @@ export class AdvancedMeasurementTools {
     };
   }
 
-  private determineMeasurementType(measurementData: any): MeasurementType {
+  private determineMeasurementType(measurementData: Record<string, unknown>): MeasurementType {
     // Determine measurement type based on tool name and data structure
     const toolName = measurementData.toolType || measurementData.tool;
     
@@ -699,23 +699,23 @@ export class AdvancedMeasurementTools {
     }
   }
 
-  private extractMeasurementValue(measurementData: any): number | number[] {
-    if (measurementData.length !== undefined) {
+  private extractMeasurementValue(measurementData: Record<string, unknown>): number | number[] {
+    if (measurementData.length !== undefined && typeof measurementData.length === 'number') {
       return measurementData.length;
     }
-    if (measurementData.area !== undefined) {
+    if (measurementData.area !== undefined && typeof measurementData.area === 'number') {
       return measurementData.area;
     }
-    if (measurementData.volume !== undefined) {
+    if (measurementData.volume !== undefined && typeof measurementData.volume === 'number') {
       return measurementData.volume;
     }
-    if (measurementData.angle !== undefined) {
+    if (measurementData.angle !== undefined && typeof measurementData.angle === 'number') {
       return measurementData.angle;
     }
     return 0;
   }
 
-  private determineMeasurementUnit(measurementData: any): string {
+  private determineMeasurementUnit(measurementData: Record<string, unknown>): string {
     const type = this.determineMeasurementType(measurementData);
     
     switch (type) {
@@ -750,13 +750,14 @@ export class AdvancedMeasurementTools {
     }
   }
 
-  private extractCoordinates(measurementData: any): number[][] {
+  private extractCoordinates(measurementData: Record<string, unknown>): number[][] {
     const coordinates: number[][] = [];
     
     if (measurementData.handles) {
-      Object.values(measurementData.handles).forEach((handle: any) => {
-        if (handle && typeof handle === 'object' && handle.x !== undefined && handle.y !== undefined) {
-          coordinates.push([handle.x, handle.y]);
+      Object.values(measurementData.handles).forEach((handle: unknown) => {
+        if (handle && typeof handle === 'object' && 'x' in handle && 'y' in handle) {
+          const typedHandle = handle as { x: number; y: number };
+          coordinates.push([typedHandle.x, typedHandle.y]);
         }
       });
     }
@@ -764,16 +765,16 @@ export class AdvancedMeasurementTools {
     return coordinates;
   }
 
-  private extractMetadata(_measurementData: any): any {
+  private extractMetadata(_measurementData: Record<string, unknown>): Record<string, unknown> {
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement!);
-    const enabledElement: any = null;
-    const image: any = enabledElement?.image;
+    const enabledElement: { image?: Record<string, unknown> } | null = null;
+    const image: Record<string, unknown> | null = (enabledElement as { image?: Record<string, unknown> } | null)?.image || null;
     
     return {
       // TODO: Update for Cornerstone3D image properties
-      pixelSpacing: (image as any)?.rowPixelSpacing ? [(image as any).rowPixelSpacing, (image as any).columnPixelSpacing] : undefined,
-      sliceThickness: (image as any)?.sliceThickness,
+      pixelSpacing: image?.rowPixelSpacing ? [image.rowPixelSpacing as number, image.columnPixelSpacing as number] : undefined,
+      sliceThickness: image?.sliceThickness as number,
       windowLevel: {
         center: image?.windowCenter || 0,
         width: image?.windowWidth || 0
@@ -783,12 +784,12 @@ export class AdvancedMeasurementTools {
     };
   }
 
-  private performQuantitativeAnalysis(measurementData: any): any {
+  private performQuantitativeAnalysis(measurementData: Record<string, unknown>): Record<string, unknown> {
     // Implement statistical analysis of the measurement region
     // TODO: Update for Cornerstone3D
     // const enabledElement = cornerstone.getEnabledElement(this.activeElement!);
-    const enabledElement: any = null;
-    const image: any = enabledElement?.image;
+    const enabledElement: { image?: Record<string, unknown> } | null = null;
+    const image: Record<string, unknown> | null = (enabledElement as { image?: Record<string, unknown> } | null)?.image || null;
     
     if (!image) return {};
     
@@ -817,24 +818,27 @@ export class AdvancedMeasurementTools {
     };
   }
 
-  private extractPixelValues(measurementData: any, image: any): number[] {
+  private extractPixelValues(measurementData: Record<string, unknown>, image: Record<string, unknown>): number[] {
     // This is a simplified implementation
     // Real implementation would extract pixels based on measurement geometry
     const pixelValues: number[] = [];
     
-    if (measurementData.handles && measurementData.handles.start && measurementData.handles.end) {
-      const startX = Math.round(measurementData.handles.start.x);
-      const startY = Math.round(measurementData.handles.start.y);
-      const endX = Math.round(measurementData.handles.end.x);
-      const endY = Math.round(measurementData.handles.end.y);
+    if (measurementData.handles && typeof measurementData.handles === 'object') {
+      const handles = measurementData.handles as { start?: { x: number; y: number }; end?: { x: number; y: number } };
+      if (handles.start && handles.end) {
+        const startX = Math.round(handles.start.x);
+        const startY = Math.round(handles.start.y);
+        const endX = Math.round(handles.end.x);
+        const endY = Math.round(handles.end.y);
       
       // TODO: Update for Cornerstone3D image properties
-      const pixelData = (image as any).getPixelData();
-      const width = (image as any).columns;
+      const imageWithMethods = image as Record<string, unknown> & { getPixelData(): number[] };
+      const pixelData = imageWithMethods.getPixelData();
+      const width = image.columns as number;
       
       for (let y = Math.min(startY, endY); y <= Math.max(startY, endY); y++) {
         for (let x = Math.min(startX, endX); x <= Math.max(startX, endX); x++) {
-          if (x >= 0 && x < width && y >= 0 && y < (image as any).rows) {
+          if (x >= 0 && x < width && y >= 0 && y < (image.rows as number)) {
             const index = y * width + x;
             if (index < pixelData.length) {
               pixelValues.push(pixelData[index]);
@@ -842,6 +846,7 @@ export class AdvancedMeasurementTools {
           }
         }
       }
+    }
     }
     
     return pixelValues;
@@ -907,7 +912,7 @@ export class AdvancedMeasurementTools {
     }
   }
 
-  private findMeasurementByData(measurementData: any): AdvancedMeasurement | undefined {
+  private findMeasurementByData(measurementData: Record<string, unknown>): AdvancedMeasurement | undefined {
     // Find measurement by comparing coordinates or other unique identifiers
     for (const measurement of this.measurements.values()) {
       if (this.compareMeasurementData(measurement, measurementData)) {
@@ -917,7 +922,7 @@ export class AdvancedMeasurementTools {
     return undefined;
   }
 
-  private compareMeasurementData(measurement: AdvancedMeasurement, measurementData: any): boolean {
+  private compareMeasurementData(measurement: AdvancedMeasurement, measurementData: Record<string, unknown>): boolean {
     // Simple comparison based on coordinates
     const dataCoords = this.extractCoordinates(measurementData);
     
@@ -1091,26 +1096,26 @@ export class AdvancedMeasurementTools {
     }, null, 2);
   }
 
-  public on(event: string, callback: Function): void {
+  public on(event: string, callback: (data?: unknown) => void): void {
     if (!this.eventListeners[event]) {
       this.eventListeners[event] = [];
     }
     this.eventListeners[event].push(callback);
   }
 
-  public off(event: string, callback: Function): void {
+  public off(event: string, callback: (data?: unknown) => void): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
     }
   }
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: unknown): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event].forEach(callback => callback(data));
     }
   }
 
-  public setImagingEngine(_engine: any): void {
+  public setImagingEngine(_engine: object): void {
     console.log('Imaging engine set for Advanced Measurement Tools');
     // Store reference to imaging engine for advanced integration
   }

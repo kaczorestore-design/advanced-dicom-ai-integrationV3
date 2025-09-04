@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import * as cornerstone from 'cornerstone-core';
-import * as cornerstoneWADOImageLoader from 'cornerstone-wado-image-loader';
 import * as dicomParser from 'dicom-parser';
 
 // RT STRUCT Interfaces
@@ -13,8 +11,8 @@ export interface RTStructure {
   contours: RTContour[];
   volume?: number;
   isVisible: boolean;
-  structureSetROISequence?: any;
-  roiContourSequence?: any;
+  structureSetROISequence?: Record<string, unknown>;
+  roiContourSequence?: Record<string, unknown>;
 }
 
 export interface RTContour {
@@ -33,8 +31,8 @@ export interface RTStructSet {
   structureSetDescription?: string;
   structures: RTStructure[];
   referencedFrameOfReference?: string;
-  referencedStudySequence?: any[];
-  referencedSeriesSequence?: any[];
+  referencedStudySequence?: Record<string, unknown>[];
+  referencedSeriesSequence?: Record<string, unknown>[];
 }
 
 // DICOM SR Interfaces
@@ -146,7 +144,7 @@ export interface DICOMQuery {
   seriesNumber?: string;
   sopInstanceUID?: string;
   instanceNumber?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface DICOMRetrieveRequest {
@@ -180,14 +178,14 @@ export class EnhancedDICOMSupport {
       const dataSet = dicomParser.parseDicom(new Uint8Array(dicomFile));
       
       const structureSet: RTStructSet = {
-        studyInstanceUID: this.getStringValue(dataSet, 'x0020000d') || '',
-        seriesInstanceUID: this.getStringValue(dataSet, 'x0020000e') || '',
-        sopInstanceUID: this.getStringValue(dataSet, 'x00080018') || '',
-        structureSetLabel: this.getStringValue(dataSet, 'x30060002') || '',
-        structureSetName: this.getStringValue(dataSet, 'x30060004'),
-        structureSetDescription: this.getStringValue(dataSet, 'x30060006'),
+        studyInstanceUID: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0020000d') || '',
+        seriesInstanceUID: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0020000e') || '',
+        sopInstanceUID: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x00080018') || '',
+        structureSetLabel: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x30060002') || '',
+        structureSetName: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x30060004'),
+        structureSetDescription: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x30060006'),
         structures: [],
-        referencedFrameOfReference: this.getStringValue(dataSet, 'x30060010')
+        referencedFrameOfReference: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x30060010')
       };
 
       // Parse ROI Contour Sequence
@@ -195,8 +193,8 @@ export class EnhancedDICOMSupport {
       const structureSetROISequence = dataSet.elements.x30060020;
       
       if (roiContourSequence && structureSetROISequence) {
-        const roiContours = this.parseSequence(dataSet, roiContourSequence);
-        const structureSetROIs = this.parseSequence(dataSet, structureSetROISequence);
+        const roiContours = this.parseSequence(dataSet as unknown as Record<string, unknown>, roiContourSequence as unknown as Record<string, unknown>);
+        const structureSetROIs = this.parseSequence(dataSet as unknown as Record<string, unknown>, structureSetROISequence as unknown as Record<string, unknown>);
         
         for (let i = 0; i < roiContours.length; i++) {
           const roiContour = roiContours[i];
@@ -221,7 +219,7 @@ export class EnhancedDICOMSupport {
     }
   }
 
-  private async parseRTStructure(roiContour: any, structureSetROI: any): Promise<RTStructure> {
+  private async parseRTStructure(roiContour: Record<string, unknown>, structureSetROI: Record<string, unknown>): Promise<RTStructure> {
     const roiNumber = parseInt(this.getStringValue(structureSetROI, 'x30060022') || '0');
     const roiName = this.getStringValue(structureSetROI, 'x30060026') || `ROI_${roiNumber}`;
     
@@ -248,9 +246,9 @@ export class EnhancedDICOMSupport {
     };
 
     // Parse contour sequence
-    const contourSequence = roiContour.elements?.x30060040;
+    const contourSequence = (roiContour as Record<string, unknown> & { elements?: Record<string, unknown> }).elements?.x30060040;
     if (contourSequence) {
-      const contours = this.parseSequence(roiContour, contourSequence);
+      const contours = this.parseSequence(roiContour as unknown as Record<string, unknown>, contourSequence as unknown as Record<string, unknown>);
       for (const contour of contours) {
         const rtContour = this.parseContour(contour);
         if (rtContour) {
@@ -265,11 +263,11 @@ export class EnhancedDICOMSupport {
     return structure;
   }
 
-  private parseContour(contour: any): RTContour | null {
+  private parseContour(contour: Record<string, unknown>): RTContour | null {
     try {
       const geometricType = this.getStringValue(contour, 'x30060042') as RTContour['geometricType'] || 'CLOSED_PLANAR';
       const contourData = this.getStringValue(contour, 'x30060050');
-      const contourImageSequence = contour.elements?.x30060016;
+      const contourImageSequence = (contour as Record<string, unknown> & { elements?: Record<string, unknown> }).elements?.x30060016;
       
       if (!contourData) return null;
 
@@ -279,9 +277,9 @@ export class EnhancedDICOMSupport {
       // Get image position from contour image sequence
       let imagePosition: [number, number, number] = [0, 0, 0];
       if (contourImageSequence) {
-        const imageSequence = this.parseSequence(contour, contourImageSequence);
+        const imageSequence = this.parseSequence(contour as unknown as Record<string, unknown>, contourImageSequence as unknown as Record<string, unknown>);
         if (imageSequence.length > 0) {
-          const referencedSOPInstanceUID = this.getStringValue(imageSequence[0], 'x00081155');
+          // const referencedSOPInstanceUID = this.getStringValue(imageSequence[0], 'x00081155');
           // Here you would typically look up the image position from the referenced image
           // For now, we'll use the first point's Z coordinate
           imagePosition = [0, 0, points[2]];
@@ -338,28 +336,28 @@ export class EnhancedDICOMSupport {
       const dataSet = dicomParser.parseDicom(new Uint8Array(dicomFile));
       
       const sr: StructuredReport = {
-        studyInstanceUID: this.getStringValue(dataSet, 'x0020000d') || '',
-        seriesInstanceUID: this.getStringValue(dataSet, 'x0020000e') || '',
-        sopInstanceUID: this.getStringValue(dataSet, 'x00080018') || '',
-        sopClassUID: this.getStringValue(dataSet, 'x00080016') || '',
-        completionFlag: this.getStringValue(dataSet, 'x0040a491') as 'PARTIAL' | 'COMPLETE' || 'COMPLETE',
-        verificationFlag: this.getStringValue(dataSet, 'x0040a493') as 'UNVERIFIED' | 'VERIFIED' || 'UNVERIFIED',
+        studyInstanceUID: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0020000d') || '',
+        seriesInstanceUID: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0020000e') || '',
+        sopInstanceUID: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x00080018') || '',
+        sopClassUID: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x00080016') || '',
+        completionFlag: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0040a491') as 'PARTIAL' | 'COMPLETE' || 'COMPLETE',
+        verificationFlag: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0040a493') as 'UNVERIFIED' | 'VERIFIED' || 'UNVERIFIED',
         contentSequence: [],
-        observationDateTime: this.getStringValue(dataSet, 'x0040a032'),
-        contentCreatorName: this.getStringValue(dataSet, 'x0070,0084')
+        observationDateTime: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0040a032'),
+        contentCreatorName: this.getStringValue(dataSet as unknown as Record<string, unknown> & { string?(tag: string): string }, 'x0070,0084')
       };
 
       // Parse content sequence
       const contentSequence = dataSet.elements.x0040a730;
       if (contentSequence) {
-        const contents = this.parseSequence(dataSet, contentSequence);
+        const contents = this.parseSequence(dataSet as unknown as Record<string, unknown>, contentSequence as unknown as Record<string, unknown>);
         sr.contentSequence = this.parseSRContentSequence(contents);
       }
 
       // Parse template information
       const contentTemplateSequence = dataSet.elements.x0040a504;
       if (contentTemplateSequence) {
-        const templates = this.parseSequence(dataSet, contentTemplateSequence);
+        const templates = this.parseSequence(dataSet as unknown as Record<string, unknown>, contentTemplateSequence as unknown as Record<string, unknown>);
         if (templates.length > 0) {
           sr.contentTemplateSequence = {
             mappingResource: this.getStringValue(templates[0], 'x00080105') || '',
@@ -378,11 +376,11 @@ export class EnhancedDICOMSupport {
     }
   }
 
-  private parseSRContentSequence(contents: any[]): SRContent[] {
+  private parseSRContentSequence(contents: Record<string, unknown>[]): SRContent[] {
     return contents.map(content => this.parseSRContent(content)).filter(Boolean) as SRContent[];
   }
 
-  private parseSRContent(content: any): SRContent | null {
+  private parseSRContent(content: Record<string, unknown>): SRContent | null {
     try {
       const valueType = this.getStringValue(content, 'x0040a040') as SRContent['valueType'];
       if (!valueType) return null;
@@ -393,9 +391,9 @@ export class EnhancedDICOMSupport {
       };
 
       // Parse concept name code sequence
-      const conceptNameCodeSequence = content.elements?.x0040a043;
+      const conceptNameCodeSequence = (content as Record<string, unknown> & { elements?: Record<string, unknown> }).elements?.x0040a043;
       if (conceptNameCodeSequence) {
-        const codes = this.parseSequence(content, conceptNameCodeSequence);
+        const codes = this.parseSequence(content as unknown as Record<string, unknown>, conceptNameCodeSequence as unknown as Record<string, unknown>);
         if (codes.length > 0) {
           srContent.conceptNameCodeSequence = this.parseCodeSequence(codes[0]);
         }
@@ -406,7 +404,7 @@ export class EnhancedDICOMSupport {
         case 'TEXT':
           srContent.textValue = this.getStringValue(content, 'x0040a160');
           break;
-        case 'NUM':
+        case 'NUM': {
           const numericValue = this.getStringValue(content, 'x0040a30a');
           if (numericValue) {
             srContent.numericValue = {
@@ -415,15 +413,17 @@ export class EnhancedDICOMSupport {
             };
           }
           break;
-        case 'CODE':
-          const codeSequence = content.elements?.x0040a168;
+        }
+        case 'CODE': {
+          const codeSequence = (content as Record<string, unknown> & { elements?: Record<string, unknown> }).elements?.x0040a168;
           if (codeSequence) {
-            const codes = this.parseSequence(content, codeSequence);
+            const codes = this.parseSequence(content as unknown as Record<string, unknown>, codeSequence as unknown as Record<string, unknown>);
             if (codes.length > 0) {
               srContent.codeValue = this.parseCodeSequence(codes[0]);
             }
           }
           break;
+        }
         case 'DATETIME':
           srContent.dateTimeValue = this.getStringValue(content, 'x0040a120');
           break;
@@ -436,9 +436,9 @@ export class EnhancedDICOMSupport {
       }
 
       // Parse child content sequence
-      const childContentSequence = content.elements?.x0040a730;
+      const childContentSequence = (content as Record<string, unknown> & { elements?: Record<string, unknown> }).elements?.x0040a730;
       if (childContentSequence) {
-        const childContents = this.parseSequence(content, childContentSequence);
+        const childContents = this.parseSequence(content as unknown as Record<string, unknown>, childContentSequence as unknown as Record<string, unknown>);
         srContent.children = this.parseSRContentSequence(childContents);
       }
 
@@ -449,7 +449,7 @@ export class EnhancedDICOMSupport {
     }
   }
 
-  private parseCodeSequence(codeItem: any): CodeSequence {
+  private parseCodeSequence(codeItem: Record<string, unknown>): CodeSequence {
     return {
       codeValue: this.getStringValue(codeItem, 'x00080100') || '',
       codingSchemeDesignator: this.getStringValue(codeItem, 'x00080102') || '',
@@ -509,7 +509,7 @@ export class EnhancedDICOMSupport {
     }
   }
 
-  async performQuery(nodeId: string, query: DICOMQuery): Promise<any[]> {
+  async performQuery(nodeId: string, query: DICOMQuery): Promise<Record<string, unknown>[]> {
     const node = this.networkNodes.get(nodeId);
     if (!node || node.connectionStatus !== 'connected') {
       throw new Error(`Node ${nodeId} is not connected`);
@@ -517,7 +517,7 @@ export class EnhancedDICOMSupport {
 
     try {
       const startTime = Date.now();
-      let results: any[] = [];
+      let results: Record<string, unknown>[] = [];
 
       if (node.protocol === 'DICOMweb') {
         results = await this.performDICOMwebQuery(node, query);
@@ -564,32 +564,35 @@ export class EnhancedDICOMSupport {
   }
 
   // Utility Methods
-  private getStringValue(dataSet: any, tag: string): string | undefined {
-    const element = dataSet.elements[tag];
+  private getStringValue(dataSet: Record<string, unknown> & { string?(tag: string): string; elements?: Record<string, unknown> }, tag: string): string | undefined {
+    const element = dataSet.elements?.[tag];
     if (!element) return undefined;
     
-    if (element.length === undefined) return undefined;
+    if ((element as Record<string, unknown>).length === undefined) return undefined;
     
-    return dataSet.string(tag);
+    return dataSet.string?.(tag);
   }
 
-  private parseSequence(dataSet: any, sequenceElement: any): any[] {
-    const items: any[] = [];
+  private parseSequence(_dataSet: Record<string, unknown>, sequenceElement: Record<string, unknown>): Record<string, unknown>[] {
+    const items: Record<string, unknown>[] = [];
     
     if (!sequenceElement || !sequenceElement.items) {
       return items;
     }
 
-    for (const item of sequenceElement.items) {
-      if (item.dataSet) {
-        items.push(item.dataSet);
+    const itemsArray = (sequenceElement as Record<string, unknown> & { items?: Array<Record<string, unknown> & { dataSet?: Record<string, unknown> }> }).items;
+    if (itemsArray) {
+      for (const item of itemsArray) {
+        if (item.dataSet) {
+          items.push(item.dataSet);
+        }
       }
     }
     
     return items;
   }
 
-  private async performCEcho(node: DICOMNetworkNode): Promise<boolean> {
+  private async performCEcho(_node: DICOMNetworkNode): Promise<boolean> {
     // Implementation would depend on the specific DICOM library being used
     // This is a placeholder for the actual C-ECHO implementation
     return new Promise((resolve) => {
@@ -597,24 +600,24 @@ export class EnhancedDICOMSupport {
     });
   }
 
-  private async performDICOMwebQuery(node: DICOMNetworkNode, query: DICOMQuery): Promise<any[]> {
+  private async performDICOMwebQuery(_node: DICOMNetworkNode, _query: DICOMQuery): Promise<Record<string, unknown>[]> {
     // Implementation for DICOMweb QIDO-RS queries
     // This would use the existing DICOMweb service
     return [];
   }
 
-  private async performDIMSEQuery(node: DICOMNetworkNode, query: DICOMQuery): Promise<any[]> {
+  private async performDIMSEQuery(_node: DICOMNetworkNode, _query: DICOMQuery): Promise<Record<string, unknown>[]> {
     // Implementation for traditional DIMSE C-FIND queries
     // This would use the DIMSE service
     return [];
   }
 
-  private async performDICOMwebRetrieve(node: DICOMNetworkNode, request: DICOMRetrieveRequest): Promise<boolean> {
+  private async performDICOMwebRetrieve(_node: DICOMNetworkNode, _request: DICOMRetrieveRequest): Promise<boolean> {
     // Implementation for DICOMweb WADO-RS retrieval
     return true;
   }
 
-  private async performDIMSERetrieve(node: DICOMNetworkNode, request: DICOMRetrieveRequest): Promise<boolean> {
+  private async performDIMSERetrieve(_node: DICOMNetworkNode, _request: DICOMRetrieveRequest): Promise<boolean> {
     // Implementation for traditional DIMSE C-MOVE/C-GET retrieval
     return true;
   }
@@ -663,7 +666,7 @@ export class EnhancedDICOMSupport {
     defaultNodes.forEach(node => this.addNetworkNode(node));
   }
 
-  private emitEvent(eventType: string, data: any): void {
+  private emitEvent(eventType: string, data: Record<string, unknown>): void {
     const event = new CustomEvent(eventType, { detail: data });
     this.eventEmitter.dispatchEvent(event);
   }
@@ -789,7 +792,7 @@ export const EnhancedDICOMSupportUI: React.FC = () => {
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setSelectedTab(tab.id as any)}
+                onClick={() => setSelectedTab(tab.id as 'rtstruct' | 'sr' | 'network')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   selectedTab === tab.id
                     ? 'border-blue-500 text-blue-600'

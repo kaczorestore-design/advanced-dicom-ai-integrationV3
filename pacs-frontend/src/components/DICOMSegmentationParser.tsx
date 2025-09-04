@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import * as dicomParser from 'dicom-parser';
-import * as cornerstone from 'cornerstone-core';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Slider } from './ui/slider';
-import { Switch } from './ui/switch';
-import { Eye, EyeOff, Palette, Download, Upload } from 'lucide-react';
+import { Eye, EyeOff, Palette, Upload } from 'lucide-react';
 
 interface SegmentInfo {
   segmentNumber: number;
@@ -93,16 +91,17 @@ export default function DICOMSegmentationParser({
           const segments: SegmentInfo[] = [];
 
           if (segmentSequence) {
-            const segmentItems = segmentSequence.items || [];
-            segmentItems.forEach((item: any, index: number) => {
-              const segmentNumber = item.dataSet.uint16('x00620004') || (index + 1);
-              const segmentLabel = item.dataSet.string('x00620005') || `Segment ${segmentNumber}`;
-              const segmentDescription = item.dataSet.string('x00620006');
-              const algorithmType = item.dataSet.string('x0062000c');
-              const algorithmName = item.dataSet.string('x0062000d');
+            const segmentItems = (segmentSequence as unknown as Record<string, unknown> & { items?: Record<string, unknown>[] }).items || [];
+            segmentItems.forEach((item: Record<string, unknown>, index: number) => {
+              const itemDataSet = item.dataSet as Record<string, unknown> & { uint16(tag: string): number; string(tag: string): string; elements: Record<string, unknown> };
+              const segmentNumber = itemDataSet.uint16('x00620004') || (index + 1);
+              const segmentLabel = itemDataSet.string('x00620005') || `Segment ${segmentNumber}`;
+              const segmentDescription = itemDataSet.string('x00620006');
+              const algorithmType = itemDataSet.string('x0062000c');
+              const algorithmName = itemDataSet.string('x0062000d');
               
               // Extract recommended display color
-              const colorString = item.dataSet.string('x0062000d');
+              const colorString = itemDataSet.string('x0062000d');
               let recommendedDisplayRGBValue: [number, number, number] = [255, 0, 0]; // Default red
               if (colorString) {
                 const colorValues = colorString.split('\\').map(Number);
@@ -112,23 +111,20 @@ export default function DICOMSegmentationParser({
               }
 
               // Extract anatomical information
-              const anatomicRegionSequence = item.dataSet.elements.x00082218;
-              let anatomicRegion = '';
-              if (anatomicRegionSequence && anatomicRegionSequence.items?.[0]) {
-                anatomicRegion = anatomicRegionSequence.items[0].dataSet.string('x00080104') || '';
-              }
+              const anatomicRegionSequence = itemDataSet.elements.x00082218;
+              const anatomicRegion = anatomicRegionSequence && (anatomicRegionSequence as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items?.[0] 
+                ? (anatomicRegionSequence as Record<string, unknown> & { items: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items[0].dataSet.string('x00080104') || ''
+                : '';
 
-              const segmentedPropertyCategorySequence = item.dataSet.elements.x0062000f;
-              let segmentedPropertyCategory = '';
-              if (segmentedPropertyCategorySequence && segmentedPropertyCategorySequence.items?.[0]) {
-                segmentedPropertyCategory = segmentedPropertyCategorySequence.items[0].dataSet.string('x00080104') || '';
-              }
+              const segmentedPropertyCategorySequence = itemDataSet.elements.x0062000f;
+              const segmentedPropertyCategory = segmentedPropertyCategorySequence && (segmentedPropertyCategorySequence as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items?.[0]
+                ? (segmentedPropertyCategorySequence as Record<string, unknown> & { items: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items[0].dataSet.string('x00080104') || ''
+                : '';
 
-              const segmentedPropertyTypeSequence = item.dataSet.elements.x00620010;
-              let segmentedPropertyType = '';
-              if (segmentedPropertyTypeSequence && segmentedPropertyTypeSequence.items?.[0]) {
-                segmentedPropertyType = segmentedPropertyTypeSequence.items[0].dataSet.string('x00080104') || '';
-              }
+              const segmentedPropertyTypeSequence = itemDataSet.elements.x00620010;
+              const segmentedPropertyType = segmentedPropertyTypeSequence && (segmentedPropertyTypeSequence as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items?.[0]
+                ? (segmentedPropertyTypeSequence as Record<string, unknown> & { items: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items[0].dataSet.string('x00080104') || ''
+                : '';
 
               segments.push({
                 segmentNumber,
@@ -168,20 +164,21 @@ export default function DICOMSegmentationParser({
 
           // For multi-frame, extract per-frame functional groups
           const perFrameFunctionalGroupsSequence = dataSet.elements.x52009230;
-          if (perFrameFunctionalGroupsSequence && perFrameFunctionalGroupsSequence.items) {
-            perFrameFunctionalGroupsSequence.items.forEach((item: any) => {
-              const planePositionSequence = item.dataSet.elements.x00209113;
-              const planeOrientationSequence = item.dataSet.elements.x00209116;
+          if (perFrameFunctionalGroupsSequence && (perFrameFunctionalGroupsSequence as unknown as Record<string, unknown> & { items?: Record<string, unknown>[] }).items) {
+            (perFrameFunctionalGroupsSequence as unknown as Record<string, unknown> & { items: Record<string, unknown>[] }).items.forEach((item: Record<string, unknown>) => {
+              const itemDataSet = item.dataSet as Record<string, unknown> & { elements: Record<string, unknown> };
+              const planePositionSequence = itemDataSet.elements.x00209113;
+              const planeOrientationSequence = itemDataSet.elements.x00209116;
               
-              if (planePositionSequence && planePositionSequence.items?.[0]) {
-                const positionString = planePositionSequence.items[0].dataSet.string('x00200032');
+              if (planePositionSequence && (planePositionSequence as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items?.[0]) {
+                const positionString = (planePositionSequence as Record<string, unknown> & { items: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items[0].dataSet.string('x00200032');
                 if (positionString) {
                   imagePositions.push(positionString.split('\\').map(Number));
                 }
               }
               
-              if (planeOrientationSequence && planeOrientationSequence.items?.[0]) {
-                const orientationString = planeOrientationSequence.items[0].dataSet.string('x00200037');
+              if (planeOrientationSequence && (planeOrientationSequence as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items?.[0]) {
+                const orientationString = (planeOrientationSequence as Record<string, unknown> & { items: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] }).items[0].dataSet.string('x00200037');
                 if (orientationString) {
                   imageOrientations.push(orientationString.split('\\').map(Number));
                 }
@@ -277,39 +274,6 @@ export default function DICOMSegmentationParser({
     onSegmentOpacityChange?.(segmentNumber, opacity / 100);
   }, [segmentationData, onSegmentOpacityChange]);
 
-  // Generate segment overlay for cornerstone
-  const generateSegmentOverlay = useCallback((segmentNumber: number, frameIndex: number = 0) => {
-    if (!segmentationData) return null;
-
-    const { pixelData, rows, columns, numberOfFrames } = segmentationData;
-    const segment = segmentationData.segments.find(s => s.segmentNumber === segmentNumber);
-    if (!segment || !segment.visible) return null;
-
-    const frameSize = rows * columns;
-    const frameOffset = frameIndex * frameSize;
-    
-    // Create RGBA overlay
-    const overlayData = new Uint8ClampedArray(frameSize * 4);
-    const [r, g, b] = segment.color;
-    const alpha = Math.round(segment.opacity * 255);
-
-    for (let i = 0; i < frameSize; i++) {
-      const pixelValue = pixelData[frameOffset + i];
-      if (pixelValue === segmentNumber) {
-        const overlayIndex = i * 4;
-        overlayData[overlayIndex] = r;     // Red
-        overlayData[overlayIndex + 1] = g; // Green
-        overlayData[overlayIndex + 2] = b; // Blue
-        overlayData[overlayIndex + 3] = alpha; // Alpha
-      }
-    }
-
-    return {
-      data: overlayData,
-      width: columns,
-      height: rows
-    };
-  }, [segmentationData]);
 
   return (
     <div className={`space-y-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>

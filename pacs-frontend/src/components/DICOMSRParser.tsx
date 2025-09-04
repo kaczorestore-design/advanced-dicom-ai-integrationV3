@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import * as dicomParser from 'dicom-parser';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
-import { FileText, Download, Upload, Search, Filter, Eye, Calendar, User, Stethoscope } from 'lucide-react';
+import { FileText, Upload, Search, Eye } from 'lucide-react';
 
 interface SRDocument {
   sopInstanceUID: string;
@@ -23,7 +23,7 @@ interface SRDocument {
   valueType: string;
   continuityOfContent: string;
   contentSequence: SRContentItem[];
-  referencedPerformedProcedureStepSequence?: any[];
+  referencedPerformedProcedureStepSequence?: Record<string, unknown>[];
   performingPhysicianName?: string;
   operatorName?: string;
   manufacturer?: string;
@@ -146,19 +146,21 @@ export default function DICOMSRParser({
           const valueType = dataSet.string('x0040a040') || 'CONTAINER';
 
           // Extract document title
-          const conceptNameCodeSequence = extractCodeSequence(dataSet, 'x0040a043');
+          const conceptNameCodeSequence = extractCodeSequence(dataSet as unknown as Record<string, unknown>, 'x0040a043');
           const documentTitle = conceptNameCodeSequence?.codeMapping || 'Structured Report';
 
           // Extract template identification
           let contentTemplateSequence: TemplateIdentification | undefined;
           const templateSeq = dataSet.elements.x0040a504;
           if (templateSeq && templateSeq.items?.[0]) {
-            const templateItem = templateSeq.items[0].dataSet;
-            contentTemplateSequence = {
-              mappingResource: templateItem.string('x00080105') || '',
-              templateID: templateItem.string('x0040db00') || '',
-              templateVersion: templateItem.string('x0040db06')
-            };
+            const templateItem = templateSeq.items[0]?.dataSet;
+            if (templateItem) {
+              contentTemplateSequence = {
+                mappingResource: templateItem.string('x00080105') || '',
+                templateID: templateItem.string('x0040db00') || '',
+                templateVersion: templateItem.string('x0040db06')
+              };
+            }
           }
 
           // Extract performing physician and operator
@@ -168,10 +170,10 @@ export default function DICOMSRParser({
           const institutionName = dataSet.string('x00080080');
 
           // Extract content sequence (main SR content)
-          const contentSequence = extractContentSequence(dataSet, 'x0040a730');
+          const contentSequence = extractContentSequence(dataSet as unknown as Record<string, unknown>, 'x0040a730');
 
           // Extract referenced performed procedure step
-          const referencedPerformedProcedureStepSequence = extractReferencedProcedureSteps(dataSet);
+          const referencedPerformedProcedureStepSequence = extractReferencedProcedureSteps(dataSet as unknown as Record<string, unknown>);
 
           const srDocument: SRDocument = {
             sopInstanceUID,
@@ -207,8 +209,8 @@ export default function DICOMSRParser({
   }, []);
 
   // Extract code sequence from dataset
-  const extractCodeSequence = (dataSet: any, tag: string): CodeSequence | undefined => {
-    const sequence = dataSet.elements[tag];
+  const extractCodeSequence = (dataSet: Record<string, unknown>, tag: string): CodeSequence | undefined => {
+    const sequence = (dataSet.elements as Record<string, unknown>)[tag] as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] };
     if (!sequence || !sequence.items?.[0]) return undefined;
 
     const item = sequence.items[0].dataSet;
@@ -221,12 +223,12 @@ export default function DICOMSRParser({
   };
 
   // Extract content sequence recursively
-  const extractContentSequence = (dataSet: any, tag: string): SRContentItem[] => {
-    const sequence = dataSet.elements[tag];
+  const extractContentSequence = (dataSet: Record<string, unknown>, tag: string): SRContentItem[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>)[tag] as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any, index: number) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>, _index: number) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string; floatString(tag: string): string };
       const valueType = itemDataSet.string('x0040a040') || 'TEXT';
       const relationshipType = itemDataSet.string('x0040a010');
       const continuityOfContent = itemDataSet.string('x0040a050');
@@ -252,7 +254,7 @@ export default function DICOMSRParser({
         case 'TEXT':
           textValue = itemDataSet.string('x0040a160');
           break;
-        case 'NUM':
+        case 'NUM': {
           const numValue = itemDataSet.floatString('x0040a30a');
           if (numValue !== undefined) {
             measurementUnitsCodeSequence = extractCodeSequence(itemDataSet, 'x0040a300');
@@ -262,6 +264,7 @@ export default function DICOMSRParser({
             };
           }
           break;
+        }
         case 'DATETIME':
           datetimeValue = itemDataSet.string('x0040a120');
           break;
@@ -311,12 +314,12 @@ export default function DICOMSRParser({
   };
 
   // Extract spatial coordinates
-  const extractSpatialCoordinates = (dataSet: any): SpatialCoordinates[] => {
-    const sequence = dataSet.elements.x0040a30c;
+  const extractSpatialCoordinates = (dataSet: Record<string, unknown>): SpatialCoordinates[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x0040a30c as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const graphicType = itemDataSet.string('x00700023') || 'POINT';
       const graphicDataString = itemDataSet.string('x00700022');
       const graphicData = graphicDataString ? graphicDataString.split('\\').map(Number) : [];
@@ -333,12 +336,12 @@ export default function DICOMSRParser({
   };
 
   // Extract referenced images
-  const extractReferencedImages = (dataSet: any): ReferencedImage[] => {
-    const sequence = dataSet.elements.x00081140;
+  const extractReferencedImages = (dataSet: Record<string, unknown>): ReferencedImage[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00081140 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const referencedSOPClassUID = itemDataSet.string('x00081150') || '';
       const referencedSOPInstanceUID = itemDataSet.string('x00081155') || '';
       const referencedFrameNumberString = itemDataSet.string('x00081160');
@@ -361,12 +364,12 @@ export default function DICOMSRParser({
   };
 
   // Extract referenced performed procedure steps
-  const extractReferencedProcedureSteps = (dataSet: any): any[] => {
-    const sequence = dataSet.elements.x00081111;
+  const extractReferencedProcedureSteps = (dataSet: Record<string, unknown>): Record<string, unknown>[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00081111 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       return {
         referencedSOPClassUID: itemDataSet.string('x00081150'),
         referencedSOPInstanceUID: itemDataSet.string('x00081155')
@@ -704,8 +707,8 @@ export default function DICOMSRParser({
                     <div className="space-y-2">
                       {srDocument.referencedPerformedProcedureStepSequence.map((ref, index) => (
                         <div key={index} className="p-2 border rounded text-sm">
-                          <div><strong>SOP Class UID:</strong> {ref.referencedSOPClassUID}</div>
-                          <div><strong>SOP Instance UID:</strong> {ref.referencedSOPInstanceUID}</div>
+                          <div><strong>SOP Class UID:</strong> {String(ref.referencedSOPClassUID || '')}</div>
+                          <div><strong>SOP Instance UID:</strong> {String(ref.referencedSOPInstanceUID || '')}</div>
                         </div>
                       ))}
                     </div>

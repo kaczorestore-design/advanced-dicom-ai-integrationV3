@@ -378,10 +378,10 @@ class PluginManagerService {
         keys: async () => Object.keys(localStorage).filter(key => key.startsWith('plugin_')).map(key => key.replace('plugin_', ''))
       },
       events: {
-        on: (event: string, listener: Function) => this.eventEmitter.addEventListener(event, listener as EventListener),
-        off: (event: string, listener: Function) => this.eventEmitter.removeEventListener(event, listener as EventListener),
-        emit: (event: string, ...args: any[]) => this.eventEmitter.dispatchEvent(new CustomEvent(event, { detail: args })),
-        once: (event: string, listener: Function) => this.eventEmitter.addEventListener(event, listener as EventListener, { once: true })
+        on: (event: string, listener: (...args: unknown[]) => void) => this.eventEmitter.addEventListener(event, listener as EventListener),
+        off: (event: string, listener: (...args: unknown[]) => void) => this.eventEmitter.removeEventListener(event, listener as EventListener),
+        emit: (event: string, ...args: unknown[]) => this.eventEmitter.dispatchEvent(new CustomEvent(event, { detail: args })),
+        once: (event: string, listener: (...args: unknown[]) => void) => this.eventEmitter.addEventListener(event, listener as EventListener, { once: true })
       },
       ui: {
         addMenuItem: (_item: PluginMenuItem) => '',

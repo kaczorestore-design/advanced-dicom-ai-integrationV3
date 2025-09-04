@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import * as dicomParser from 'dicom-parser';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
-import { Key, Download, Upload, Search, Eye, Calendar, User, Star, Image, FileText } from 'lucide-react';
+import { Key, Upload, Eye, Star, Image, FileText } from 'lucide-react';
 
 interface KOSDocument {
   sopInstanceUID: string;
@@ -121,7 +121,7 @@ export default function DICOMKOSParser({
           const contentTime = dataSet.string('x00080033');
 
           // Extract document title from concept name code sequence
-          const conceptNameCodeSequence = extractCodeSequence(dataSet, 'x0040a043');
+          const conceptNameCodeSequence = extractCodeSequence(dataSet as unknown as Record<string, unknown>, 'x0040a043');
           const documentTitle = conceptNameCodeSequence?.codeMapping || 'Key Object Selection Document';
 
           // Extract template identification
@@ -129,21 +129,23 @@ export default function DICOMKOSParser({
           const templateSeq = dataSet.elements.x0040a504;
           if (templateSeq && templateSeq.items?.[0]) {
             const templateItem = templateSeq.items[0].dataSet;
-            contentTemplateSequence = {
-              mappingResource: templateItem.string('x00080105') || '',
-              templateID: templateItem.string('x0040db00') || '',
-              templateVersion: templateItem.string('x0040db06')
-            };
+            if (templateItem) {
+              contentTemplateSequence = {
+                mappingResource: templateItem.string('x00080105') || '',
+                templateID: templateItem.string('x0040db00') || '',
+                templateVersion: templateItem.string('x0040db06')
+              };
+            }
           }
 
           // Extract evidence sequence (main content)
-          const evidenceSequence = extractEvidenceSequence(dataSet, 'x0040a375');
+          const evidenceSequence = extractEvidenceSequence(dataSet as unknown as Record<string, unknown>, 'x0040a375');
 
           // Extract current requested procedure evidence sequence
-          const currentRequestedProcedureEvidenceSequence = extractEvidenceSequence(dataSet, 'x0040a385');
+          const currentRequestedProcedureEvidenceSequence = extractEvidenceSequence(dataSet as unknown as Record<string, unknown>, 'x0040a385');
 
           // Extract identical documents sequence
-          const identicalDocumentsSequence = extractIdenticalDocuments(dataSet);
+          const identicalDocumentsSequence = extractIdenticalDocuments(dataSet as unknown as Record<string, unknown>);
 
           // Extract institutional and personnel information
           const institutionName = dataSet.string('x00080080');
@@ -192,8 +194,8 @@ export default function DICOMKOSParser({
   }, []);
 
   // Extract code sequence from dataset
-  const extractCodeSequence = (dataSet: any, tag: string): CodeSequence | undefined => {
-    const sequence = dataSet.elements[tag];
+  const extractCodeSequence = (dataSet: Record<string, unknown>, tag: string): CodeSequence | undefined => {
+    const sequence = (dataSet.elements as Record<string, unknown>)[tag] as Record<string, unknown> & { items?: { dataSet: Record<string, unknown> & { string(tag: string): string } }[] };
     if (!sequence || !sequence.items?.[0]) return undefined;
 
     const item = sequence.items[0].dataSet;
@@ -206,12 +208,12 @@ export default function DICOMKOSParser({
   };
 
   // Extract evidence sequence
-  const extractEvidenceSequence = (dataSet: any, tag: string): EvidenceSequence[] => {
-    const sequence = dataSet.elements[tag];
+  const extractEvidenceSequence = (dataSet: Record<string, unknown>, tag: string): EvidenceSequence[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>)[tag] as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const studyInstanceUID = itemDataSet.string('x0020000d') || '';
       
       // Extract series sequence
@@ -225,12 +227,12 @@ export default function DICOMKOSParser({
   };
 
   // Extract series sequence
-  const extractSeriesSequence = (dataSet: any): SeriesSequence[] => {
-    const sequence = dataSet.elements.x00081115;
+  const extractSeriesSequence = (dataSet: Record<string, unknown>): SeriesSequence[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00081115 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const seriesInstanceUID = itemDataSet.string('x0020000e') || '';
       
       // Extract referenced SOP sequence
@@ -244,12 +246,12 @@ export default function DICOMKOSParser({
   };
 
   // Extract referenced SOP sequence
-  const extractReferencedSOPSequence = (dataSet: any): ReferencedSOPSequence[] => {
-    const sequence = dataSet.elements.x00081140;
+  const extractReferencedSOPSequence = (dataSet: Record<string, unknown>): ReferencedSOPSequence[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x00081140 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       const referencedSOPClassUID = itemDataSet.string('x00081150') || '';
       const referencedSOPInstanceUID = itemDataSet.string('x00081155') || '';
       
@@ -279,12 +281,12 @@ export default function DICOMKOSParser({
   };
 
   // Extract identical documents sequence
-  const extractIdenticalDocuments = (dataSet: any): IdenticalDocument[] => {
-    const sequence = dataSet.elements.x0040a525;
+  const extractIdenticalDocuments = (dataSet: Record<string, unknown>): IdenticalDocument[] => {
+    const sequence = (dataSet.elements as Record<string, unknown>).x0040a525 as Record<string, unknown> & { items?: Record<string, unknown>[] };
     if (!sequence || !sequence.items) return [];
 
-    return sequence.items.map((item: any) => {
-      const itemDataSet = item.dataSet;
+    return sequence.items.map((item: Record<string, unknown>) => {
+      const itemDataSet = item.dataSet as Record<string, unknown> & { string(tag: string): string };
       return {
         studyInstanceUID: itemDataSet.string('x0020000d') || '',
         seriesInstanceUID: itemDataSet.string('x0020000e') || '',

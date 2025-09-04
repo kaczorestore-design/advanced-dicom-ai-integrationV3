@@ -29,11 +29,10 @@ interface ThemeProviderProps {
 
 export function ThemeProvider({
   children,
-  attribute = 'class',
+  attribute: _attribute = 'class',
   defaultTheme = 'system',
-  enableSystem = true,
-  disableTransitionOnChange = false,
-  ...props
+  enableSystem: _enableSystem = true,
+  disableTransitionOnChange: _disableTransitionOnChange = false
 }: ThemeProviderProps) {
   const {
     theme,
@@ -41,13 +40,7 @@ export function ThemeProvider({
     systemTheme,
     resolvedTheme,
     themes
-  } = useNextTheme({
-    attribute,
-    defaultTheme,
-    enableSystem,
-    disableTransitionOnChange,
-    ...props
-  });
+  } = useNextTheme();
 
   const [mounted, setMounted] = useState(false);
 

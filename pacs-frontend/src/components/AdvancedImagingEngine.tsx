@@ -45,10 +45,20 @@ export interface FusionConfig {
   threshold: number;
 }
 
+interface ImageData {
+  imageIds: string[];
+  token?: string;
+}
+
+interface MPRViewer {
+  container: HTMLElement;
+  view: string;
+}
+
 export class AdvancedImagingEngine {
   private container: HTMLElement | null = null;
-  private imageData: any = null;
-  private mprViewers: { [key: string]: any } = {};
+  private imageData: ImageData | null = null;
+  private mprViewers: { [key: string]: MPRViewer } = {};
   // TODO: Implement fusion data functionality
   // private fusionData: { [key: string]: any } = {};
   private options: AdvancedImagingOptions;
@@ -291,7 +301,7 @@ export class AdvancedImagingEngine {
     console.log(`MPR ${enabled ? 'enabled' : 'disabled'}`);
   }
 
-  setDatasetHandler(_handler: any): void {
+  setDatasetHandler(_handler: (data: ImageData) => void): void {
     console.log('Dataset handler set for Advanced Imaging Engine');
   }
 

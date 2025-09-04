@@ -1,59 +1,3 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Separator } from './ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Checkbox } from './ui/checkbox';
-import { Label } from './ui/label';
-import { ScrollArea } from './ui/scroll-area';
-import {
-  Play,
-  Pause,
-  SkipForward,
-  SkipBack,
-  Grid,
-  Layout,
-  FileText,
-  Save,
-  Download,
-  Upload,
-  Settings,
-  Search,
-  Filter,
-  Sort,
-  Calendar,
-  Clock,
-  User,
-  Hospital,
-  Stethoscope,
-  Brain,
-  Heart,
-  Bone,
-  Eye,
-  Zap,
-  Target,
-  TrendingUp,
-  CheckCircle,
-  AlertCircle,
-  XCircle,
-  Star,
-  Bookmark,
-  Share,
-  Print,
-  Mail,
-  Phone,
-  MessageSquare,
-  Video,
-  Mic,
-  Camera,
-  Monitor,
-  Tablet,
-  Smartphone
-} from 'lucide-react';
 
 export interface Study {
   id: string;
@@ -95,8 +39,8 @@ export interface Study {
   starred?: boolean;
   lastViewed?: Date;
   viewCount?: number;
-  annotations?: any[];
-  measurements?: any[];
+  annotations?: Record<string, unknown>[];
+  measurements?: Record<string, unknown>[];
 }
 
 export interface HangingProtocol {
@@ -236,7 +180,7 @@ export class ClinicalWorkflowManager {
   private hangingProtocols: Map<string, HangingProtocol> = new Map();
   private reportTemplates: Map<string, ReportTemplate> = new Map();
   private config: ClinicalWorkflowConfig;
-  private eventListeners: { [key: string]: Function[] } = {};
+  private eventListeners: { [key: string]: ((...args: unknown[]) => void)[] } = {};
   private currentStudy: Study | null = null;
   private currentProtocol: HangingProtocol | null = null;
   private worklistFilters: WorklistFilter = {};
@@ -1144,20 +1088,20 @@ Orbits: `,
   }
 
   // Event Management
-  public on(event: string, callback: Function): void {
+  public on(event: string, callback: (...args: unknown[]) => void): void {
     if (!this.eventListeners[event]) {
       this.eventListeners[event] = [];
     }
     this.eventListeners[event].push(callback);
   }
 
-  public off(event: string, callback: Function): void {
+  public off(event: string, callback: (...args: unknown[]) => void): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
     }
   }
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: unknown): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event].forEach(callback => callback(data));
     }
@@ -1173,7 +1117,7 @@ Orbits: `,
     return this.config;
   }
 
-  public setNetworkManager(networkManager: any): void {
+  public setNetworkManager(_networkManager: unknown): void {
     console.log('Network manager set for Clinical Workflow Manager');
     // Store reference to network manager for DICOM operations
   }

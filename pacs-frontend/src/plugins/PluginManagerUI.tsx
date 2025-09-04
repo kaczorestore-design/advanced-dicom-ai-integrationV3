@@ -732,7 +732,7 @@ const PluginConfigurationForm: React.FC<PluginConfigurationFormProps> = ({
         }
         return (
           <Input
-            value={value || ''}
+            value={String(value || '')}
             onChange={(e) => updateConfig(key, e.target.value)}
             placeholder={field.description}
           />
@@ -756,7 +756,7 @@ const PluginConfigurationForm: React.FC<PluginConfigurationFormProps> = ({
       case 'textarea':
         return (
           <Textarea
-            value={value || ''}
+            value={String(value || '')}
             onChange={(e) => updateConfig(key, e.target.value)}
             placeholder={field.description}
           />
@@ -764,7 +764,7 @@ const PluginConfigurationForm: React.FC<PluginConfigurationFormProps> = ({
       default:
         return (
           <Input
-            value={value || ''}
+            value={String(value || '')}
             onChange={(e) => updateConfig(key, e.target.value)}
             placeholder={field.description}
           />
@@ -845,7 +845,7 @@ const PluginConfigurationForm: React.FC<PluginConfigurationFormProps> = ({
                       <p className="text-xs text-gray-500 mt-1">{field.description}</p>
                     )}
                     <div className="mt-2">
-                      {renderConfigField(key, field)}
+                      {renderConfigField(key, field as ConfigField)}
                     </div>
                   </div>
                 ))}

@@ -150,10 +150,10 @@ class IntegrationService {
         const fhirClient = FHIRClientFactory.getClient({
           id: config.id,
           name: config.name,
-          type: config.type,
+          type: config.type === 'custom_fhir' ? 'fhir' : config.type === 'hl7_v2' ? 'custom' : config.type,
           baseUrl: config.endpoint,
           fhirVersion: 'R4',
-          authType: config.authentication.type,
+          authType: config.authentication.type === 'api_key' ? 'apikey' : config.authentication.type,
           clientId: config.authentication.clientId,
           clientSecret: config.authentication.clientSecret,
           username: config.authentication.username,
@@ -186,7 +186,7 @@ class IntegrationService {
         configId: config.id,
         type: 'sync_started',
         timestamp: new Date().toISOString(),
-        data: config,
+        data: config as unknown as Record<string, unknown>,
         message: `Configuration ${config.name} added successfully`
       });
       
@@ -216,10 +216,10 @@ class IntegrationService {
       const fhirClient = FHIRClientFactory.getClient({
         id: updatedConfig.id,
         name: updatedConfig.name,
-        type: updatedConfig.type,
+        type: updatedConfig.type === 'custom_fhir' ? 'fhir' : updatedConfig.type === 'hl7_v2' ? 'custom' : updatedConfig.type,
         baseUrl: updatedConfig.endpoint,
         fhirVersion: 'R4',
-        authType: updatedConfig.authentication.type,
+        authType: updatedConfig.authentication.type === 'api_key' ? 'apikey' : updatedConfig.authentication.type,
         clientId: updatedConfig.authentication.clientId,
         clientSecret: updatedConfig.authentication.clientSecret,
         username: updatedConfig.authentication.username,
@@ -273,10 +273,10 @@ class IntegrationService {
         const fhirClient = FHIRClientFactory.getClient({
           id: config.id,
           name: config.name,
-          type: config.type,
+          type: config.type === 'custom_fhir' ? 'fhir' : config.type === 'hl7_v2' ? 'custom' : config.type,
           baseUrl: config.endpoint,
           fhirVersion: 'R4',
-          authType: config.authentication.type,
+          authType: config.authentication.type === 'api_key' ? 'apikey' : config.authentication.type,
           clientId: config.authentication.clientId,
           clientSecret: config.authentication.clientSecret,
           username: config.authentication.username,
@@ -298,7 +298,7 @@ class IntegrationService {
         return true;
       } else if (config.type === 'hl7_v2') {
         // Test HL7 v2 connection (TCP/MLLP)
-        return await this.testHL7Connection(config);
+        return await this.testHL7Connection();
       }
       
       return false;
@@ -358,7 +358,7 @@ class IntegrationService {
         configId,
         type: 'sync_completed',
         timestamp: new Date().toISOString(),
-        data: syncStatus
+        data: syncStatus as unknown as Record<string, unknown>
       });
       
     } catch (error) {
@@ -406,7 +406,7 @@ class IntegrationService {
         if (bundle.entry && bundle.entry.length > 0) {
           for (const entry of bundle.entry) {
             try {
-              const mappedData = await this.mapResourceData(config, entry.resource);
+              const mappedData = await this.mapResourceData(config, entry.resource as Record<string, unknown>);
               if (mappedData.success) {
                 await this.storeResourceData(resourceType, mappedData.mappedData);
                 syncStatus.recordsProcessed++;

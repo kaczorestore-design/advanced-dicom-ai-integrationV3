@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -10,64 +10,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from './ui/checkbox';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
-import {
-  Play,
-  Pause,
-  SkipForward,
-  SkipBack,
-  Grid,
-  Layout,
-  FileText,
-  Save,
-  Download,
-  Upload,
-  Settings,
-  Search,
-  Filter,
-  Sort,
-  Calendar,
-  Clock,
-  User,
-  Hospital,
-  Stethoscope,
-  Brain,
-  Heart,
-  Bone,
-  Eye,
-  Zap,
-  Target,
-  TrendingUp,
-  CheckCircle,
-  AlertCircle,
-  XCircle,
+import { 
+  RefreshCw, 
+  X, 
+  Search, 
+  Layout, 
+  FileText, 
+  Settings, 
+  Filter, 
+  Plus, 
+  Save, 
+  Download, 
   Star,
+  Brain,
   Bookmark,
-  Share,
-  Print,
-  Mail,
-  Phone,
-  MessageSquare,
-  Video,
-  Mic,
-  Camera,
-  Monitor,
-  Tablet,
-  Smartphone,
-  Plus,
-  Edit,
-  Trash2,
-  Copy,
-  RefreshCw,
-  X
+  Grid,
+  Share
 } from 'lucide-react';
 
 import ClinicalWorkflowManager, {
   Study,
   HangingProtocol,
-  ViewportConfig,
   WorklistFilter,
-  ReportTemplate,
-  ClinicalWorkflowConfig
+  ReportTemplate
 } from './ClinicalWorkflowManager';
 
 interface ClinicalWorkflowUIProps {
@@ -98,9 +63,8 @@ const ClinicalWorkflowUI: React.FC<ClinicalWorkflowUIProps> = ({
   const [activeTab, setActiveTab] = useState('worklist');
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filters, setFilters] = useState<WorklistFilter>({});
+  const [filters] = useState<WorklistFilter>({});
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedStudies, setSelectedStudies] = useState<Set<string>>(new Set());
   const [reportContent, setReportContent] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
@@ -117,16 +81,16 @@ const ClinicalWorkflowUI: React.FC<ClinicalWorkflowUIProps> = ({
         setReportTemplates(workflowManager.getReportTemplates());
         
         // Set up event listeners
-        workflowManager.on('studyAdded', (study: Study) => {
-          setStudies(prev => [...prev, study]);
+        workflowManager.on('studyAdded', (...args: unknown[]) => {
+          setStudies(prev => [...prev, args[0] as Study]);
         });
         
-        workflowManager.on('studyUpdated', (study: Study) => {
-          setStudies(prev => prev.map(s => s.id === study.id ? study : s));
+        workflowManager.on('studyUpdated', (...args: unknown[]) => {
+          setStudies(prev => prev.map(s => s.id === (args[0] as Study).id ? args[0] as Study : s));
         });
         
-        workflowManager.on('hangingProtocolCreated', (protocol: HangingProtocol) => {
-          setHangingProtocols(prev => [...prev, protocol]);
+        workflowManager.on('hangingProtocolCreated', (...args: unknown[]) => {
+          setHangingProtocols(prev => [...prev, args[0] as HangingProtocol]);
         });
         
         setIsLoading(false);
