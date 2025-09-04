@@ -81,7 +81,7 @@ export const PerformanceOptimizationUI: React.FC<PerformanceOptimizationUIProps>
         updateChart();
       };
 
-      const handleOptimizationApplied = (optimization: any) => {
+      const handleOptimizationApplied = (optimization: Record<string, unknown>) => {
         setOptimizationHistory(prev => [optimization, ...prev.slice(0, 49)]);
       };
 
@@ -160,7 +160,7 @@ export const PerformanceOptimizationUI: React.FC<PerformanceOptimizationUIProps>
       browser: navigator.userAgent,
       platform: navigator.platform,
       cores: navigator.hardwareConcurrency || 4,
-      memory: (navigator as any).deviceMemory ? (navigator as any).deviceMemory * 1024 * 1024 * 1024 : 8 * 1024 * 1024 * 1024,
+      memory: (navigator as unknown as Record<string, unknown>).deviceMemory ? ((navigator as unknown as Record<string, unknown>).deviceMemory as number) * 1024 * 1024 * 1024 : 8 * 1024 * 1024 * 1024,
       webgl: {
         version: gl instanceof WebGL2RenderingContext ? '2.0' : '1.0',
         maxTextureSize: gl ? gl.getParameter(gl.MAX_TEXTURE_SIZE) : 0,
@@ -454,7 +454,7 @@ export const PerformanceOptimizationUI: React.FC<PerformanceOptimizationUIProps>
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setSelectedTab(tab.id as any)}
+                onClick={() => setSelectedTab(tab.id as 'overview' | 'profiles' | 'strategies' | 'gpu' | 'memory' | 'workers' | 'recommendations')}
                 className={`py-2 px-1 border-b-2 font-medium text-sm ${
                   selectedTab === tab.id
                     ? 'border-blue-500 text-blue-600'

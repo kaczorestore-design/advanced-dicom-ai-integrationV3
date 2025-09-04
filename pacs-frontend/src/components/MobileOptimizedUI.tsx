@@ -1,19 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Drawer, DrawerContent, DrawerTrigger, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
 import {
-  Menu,
   Settings,
   ZoomIn,
-  ZoomOut,
   RotateCw,
   Move,
   Ruler,
@@ -26,22 +21,12 @@ import {
   MoreVertical,
   ChevronUp,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   X,
-  Check,
   Play,
   Pause,
   SkipBack,
   SkipForward,
-  Volume2,
-  Maximize,
-  Minimize,
   Grid,
-  List,
-  Search,
-  Filter,
-  SortAsc,
   Info,
   AlertCircle,
   CheckCircle,
@@ -500,10 +485,10 @@ export const MobileOptimizedUI: React.FC<MobileOptimizedUIProps> = ({
         {/* Compact Toolbar */}
         <div className="p-2">
           <MobileToolbar
-            tools={tools}
+            tools={tools || []}
             activeTools={activeTools}
-            onToolSelect={onToolSelect}
-            onToolDeselect={onToolDeselect}
+            onToolSelect={onToolSelect || (() => {})}
+            onToolDeselect={onToolDeselect || (() => {})}
             compact
           />
         </div>
@@ -589,10 +574,10 @@ export const MobileOptimizedUI: React.FC<MobileOptimizedUIProps> = ({
             <div className="p-4">
               {activePanel === 'tools' && (
                 <MobileToolbar
-                  tools={tools}
+                  tools={tools || []}
                   activeTools={activeTools}
-                  onToolSelect={onToolSelect}
-                  onToolDeselect={onToolDeselect}
+                  onToolSelect={onToolSelect || (() => {})}
+                  onToolDeselect={onToolDeselect || (() => {})}
                 />
               )}
               

@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { imageLoader } from '@cornerstonejs/core';
-import * as cornerstoneTools from '@cornerstonejs/tools';
 import { v4 as uuidv4 } from 'uuid';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
@@ -140,7 +139,7 @@ class TemporalImagingTools {
   private playbackTimer: NodeJS.Timeout | null = null;
   private currentFrame: number = 0;
   private isPlaying: boolean = false;
-  private eventListeners: Map<string, Function[]> = new Map();
+  private eventListeners: Map<string, ((...args: unknown[]) => void)[]> = new Map();
   private workers: Map<string, Worker> = new Map();
 
   constructor(config: Partial<TemporalConfig> = {}) {
@@ -192,7 +191,7 @@ class TemporalImagingTools {
       const cardiacWorker = new Worker('/workers/cardiacAnalysis.js');
       cardiacWorker.onmessage = (e) => this.handleWorkerResult('cardiac', e.data);
       this.workers.set('cardiac', cardiacWorker);
-    } catch (error) {
+    } catch (_error) {
       console.warn('Web workers not available, falling back to main thread processing');
     }
   }
@@ -214,14 +213,14 @@ class TemporalImagingTools {
     // TODO: Update for Cornerstone3D
     // const TimeIntensityTool = cornerstoneTools.importInternal('base/BaseTool');
     
-    class TemporalTimeIntensityTool {
+    const TemporalTimeIntensityTool = class {
       constructor(_props = {}) {
         // TODO: Update constructor for Cornerstone3D
         // const defaultProps = { name: 'TemporalTimeIntensity', supportedInteractionTypes: ['Mouse', 'Touch'] };
         // super(props, defaultProps);
       }
 
-      async analyzeTimeIntensity(regionData: any, temporalSeries: TemporalSeries, _element: HTMLElement) {
+      async analyzeTimeIntensity(regionData: Record<string, unknown>, temporalSeries: TemporalSeries, _element: HTMLElement) {
         const timeIntensityCurve = await this.calculateTimeIntensityCurve(regionData, temporalSeries);
         const metrics = this.calculateCurveMetrics(timeIntensityCurve);
         
@@ -234,13 +233,13 @@ class TemporalImagingTools {
         };
       }
 
-      async calculateTimeIntensityCurve(_regionData: any, _temporalSeries: TemporalSeries) {
+      async calculateTimeIntensityCurve(_regionData: Record<string, unknown>, _temporalSeries: TemporalSeries) {
         const timePoints: number[] = [];
         const intensityValues: number[] = [];
 
         for (const frame of _temporalSeries.frames) {
           const image = await imageLoader.loadAndCacheImage(frame.imageId);
-          const intensity = this.extractRegionIntensity(_regionData, image);
+          const intensity = this.extractRegionIntensity(_regionData, image as unknown as Record<string, unknown>);
           
           timePoints.push(frame.timestamp);
           intensityValues.push(intensity);
@@ -295,25 +294,25 @@ class TemporalImagingTools {
         };
       }
 
-      extractRegionIntensity(regionData: any, image: any): number {
+      extractRegionIntensity(regionData: Record<string, unknown>, image: Record<string, unknown>): number {
         // Extract pixel values from the region and calculate mean intensity
-        const pixelData = image.getPixelData();
+        const pixelData = (image as unknown as { getPixelData(): number[] }).getPixelData();
         const { width, height } = image;
         
         // Simplified region extraction - in practice, this would be more sophisticated
-        const coordinates = regionData.handles?.points || regionData.coordinates;
+        const coordinates = (regionData.handles as unknown as { points?: Record<string, unknown>[] })?.points || (regionData.coordinates as Record<string, unknown>[]) || [];
         if (!coordinates || coordinates.length === 0) return 0;
         
         let totalIntensity = 0;
         let pixelCount = 0;
         
         // For simplicity, sample a few points around the region
-        coordinates.forEach((point: any) => {
-          const x = Math.round(point.x || point[0]);
-          const y = Math.round(point.y || point[1]);
+        coordinates.forEach((point: Record<string, unknown>) => {
+          const x = Math.round((point.x as number) || (point[0] as number));
+          const y = Math.round((point.y as number) || (point[1] as number));
           
-          if (x >= 0 && x < width && y >= 0 && y < height) {
-            const index = y * width + x;
+          if (x >= 0 && x < (width as number) && y >= 0 && y < (height as number)) {
+            const index = y * (width as number) + x;
             totalIntensity += pixelData[index];
             pixelCount++;
           }
@@ -323,6 +322,7 @@ class TemporalImagingTools {
       }
     }
 
+    console.log('Registering TemporalTimeIntensityTool:', TemporalTimeIntensityTool);
     // cornerstoneTools.addTool(TemporalTimeIntensityTool); // TODO: Update for Cornerstone3D
   }
 
@@ -330,14 +330,14 @@ class TemporalImagingTools {
     // TODO: Update for Cornerstone3D
     // const MotionAnalysisTool = cornerstoneTools.importInternal('base/BaseTool');
     
-    class TemporalMotionAnalysisTool {
+    const TemporalMotionAnalysisTool = class {
       constructor(_props = {}) {
         // TODO: Update constructor for Cornerstone3D
         // const defaultProps = { name: 'TemporalMotionAnalysis', supportedInteractionTypes: ['Mouse', 'Touch'] };
         // super(props, defaultProps);
       }
 
-      async analyzeMotion(regionData: any, temporalSeries: TemporalSeries, _element: HTMLElement) {
+      async analyzeMotion(regionData: Record<string, unknown>, temporalSeries: TemporalSeries, _element: HTMLElement) {
         const motionVectors = await this.calculateMotionVectors(regionData, temporalSeries);
         const motionMetrics = this.calculateMotionMetrics(motionVectors);
         
@@ -347,7 +347,7 @@ class TemporalImagingTools {
         };
       }
 
-      async calculateMotionVectors(regionData: any, temporalSeries: TemporalSeries) {
+      async calculateMotionVectors(regionData: Record<string, unknown>, temporalSeries: TemporalSeries) {
         const motionVectors: Array<{ dx: number, dy: number, magnitude: number }> = [];
         
         for (let i = 1; i < temporalSeries.frames.length; i++) {
@@ -357,14 +357,14 @@ class TemporalImagingTools {
           const prevImage = await imageLoader.loadAndCacheImage(prevFrame.imageId);
           const currImage = await imageLoader.loadAndCacheImage(currFrame.imageId);
           
-          const motion = this.calculateFrameMotion(regionData, prevImage, currImage);
+          const motion = this.calculateFrameMotion(regionData, prevImage as unknown, currImage as unknown);
           motionVectors.push(motion);
         }
         
         return motionVectors;
       }
 
-      calculateFrameMotion(_regionData: any, _prevImage: any, _currImage: any) {
+      calculateFrameMotion(_regionData: Record<string, unknown>, _prevImage: unknown, _currImage: unknown) {
         // Simplified motion calculation using template matching
         // In practice, this would use more sophisticated optical flow algorithms
         
@@ -405,6 +405,7 @@ class TemporalImagingTools {
       }
     }
 
+    console.log('Registering TemporalMotionAnalysisTool:', TemporalMotionAnalysisTool);
     // cornerstoneTools.addTool(TemporalMotionAnalysisTool); // TODO: Update for Cornerstone3D
   }
 
@@ -412,14 +413,14 @@ class TemporalImagingTools {
     // TODO: Update for Cornerstone3D
     // const PerfusionAnalysisTool = cornerstoneTools.importInternal('base/BaseTool');
     
-    class TemporalPerfusionAnalysisTool {
+    const TemporalPerfusionAnalysisTool = class {
       constructor(_props = {}) {
         // TODO: Update constructor for Cornerstone3D
         // const defaultProps = { name: 'TemporalPerfusionAnalysis', supportedInteractionTypes: ['Mouse', 'Touch'] };
         // super(props, defaultProps);
       }
 
-      async analyzePerfusion(regionData: any, temporalSeries: TemporalSeries, _element: HTMLElement) {
+      async analyzePerfusion(regionData: Record<string, unknown>, temporalSeries: TemporalSeries, _element: HTMLElement) {
         const timeIntensityCurve = await this.calculateTimeIntensityCurve(regionData, temporalSeries);
         const perfusionMetrics = this.calculatePerfusionMetrics(timeIntensityCurve);
         
@@ -429,7 +430,7 @@ class TemporalImagingTools {
         };
       }
 
-      async calculateTimeIntensityCurve(_regionData: any, _temporalSeries: TemporalSeries) {
+      async calculateTimeIntensityCurve(_regionData: Record<string, unknown>, _temporalSeries: TemporalSeries) {
         // Reuse time-intensity calculation from TimeIntensityTool
         // Note: Tool access needs to be updated for Cornerstone3D
         // const timeIntensityTool = cornerstoneTools.getToolForElement(this.element, 'TemporalTimeIntensity');
@@ -489,6 +490,7 @@ class TemporalImagingTools {
       }
     }
 
+    console.log('Registering TemporalPerfusionAnalysisTool:', TemporalPerfusionAnalysisTool);
     // cornerstoneTools.addTool(TemporalPerfusionAnalysisTool); // TODO: Update for Cornerstone3D
   }
 
@@ -496,14 +498,14 @@ class TemporalImagingTools {
     // TODO: Update for Cornerstone3D
     // const CardiacAnalysisTool = cornerstoneTools.importInternal('base/BaseTool');
     
-    class TemporalCardiacAnalysisTool {
+    const TemporalCardiacAnalysisTool = class {
       constructor(_props = {}) {
         // TODO: Update constructor for Cornerstone3D
         // const defaultProps = { name: 'TemporalCardiacAnalysis', supportedInteractionTypes: ['Mouse', 'Touch'] };
         // super(props, defaultProps);
       }
 
-      async analyzeCardiacFunction(regionData: any, temporalSeries: TemporalSeries, _element: HTMLElement) {
+      async analyzeCardiacFunction(regionData: Record<string, unknown>, temporalSeries: TemporalSeries, _element: HTMLElement) {
         const cardiacCycle = await this.detectCardiacCycle(temporalSeries);
         const functionalMetrics = this.calculateCardiacMetrics(cardiacCycle, regionData);
         
@@ -529,7 +531,7 @@ class TemporalImagingTools {
         return phases;
       }
 
-      calculateCardiacMetrics(cardiacCycle: any[], _regionData: any) {
+      calculateCardiacMetrics(cardiacCycle: Record<string, unknown>[], _regionData: Record<string, unknown>) {
         // Calculate cardiac-specific metrics
         const systolicFrames = cardiacCycle.filter(c => c.phase === 'systole');
         const diastolicFrames = cardiacCycle.filter(c => c.phase === 'diastole');
@@ -549,6 +551,7 @@ class TemporalImagingTools {
       }
     }
 
+    console.log('Registering TemporalCardiacAnalysisTool:', TemporalCardiacAnalysisTool);
     // cornerstoneTools.addTool(TemporalCardiacAnalysisTool); // TODO: Update for Cornerstone3D
   }
 
@@ -557,7 +560,7 @@ class TemporalImagingTools {
     // const RespiratoryGatingTool = cornerstoneTools.importInternal('base/BaseTool');
     
     // TODO: Update class to extend proper Cornerstone3D base tool
-    class TemporalRespiratoryGatingTool { // extends RespiratoryGatingTool {
+    const TemporalRespiratoryGatingTool = class { // extends RespiratoryGatingTool {
       constructor(_props = {}) {
         // TODO: Update constructor for Cornerstone3D
         // const defaultProps = { name: 'TemporalRespiratoryGating', supportedInteractionTypes: ['Mouse', 'Touch'] };
@@ -593,7 +596,7 @@ class TemporalImagingTools {
         return phases;
       }
 
-      performRespiratoryGating(_temporalSeries: TemporalSeries, phases: any[]) {
+      performRespiratoryGating(_temporalSeries: TemporalSeries, phases: Record<string, unknown>[]) {
         // Group frames by respiratory phase
         const inspirationFrames = phases.filter(p => p.phase === 'inspiration').map(p => p.frame);
         const expirationFrames = phases.filter(p => p.phase === 'expiration').map(p => p.frame);
@@ -605,6 +608,7 @@ class TemporalImagingTools {
       }
     }
 
+    console.log('Registering TemporalRespiratoryGatingTool:', TemporalRespiratoryGatingTool);
     // cornerstoneTools.addTool(TemporalRespiratoryGatingTool); // TODO: Update for Cornerstone3D
   }
 
@@ -625,26 +629,26 @@ class TemporalImagingTools {
     this.activeElement.removeEventListener('cornerstoneimagerendered', this.handleImageRendered.bind(this));
   }
 
-  private handleMeasurementAdded(event: any): void {
-    const measurementData = event.detail;
+  private handleMeasurementAdded(event: Event): void {
+    const measurementData = (event as CustomEvent).detail;
     this.performTemporalAnalysis(measurementData);
   }
 
-  private handleMeasurementModified(event: any): void {
-    const measurementData = event.detail;
+  private handleMeasurementModified(event: Event): void {
+    const measurementData = (event as CustomEvent).detail;
     this.performTemporalAnalysis(measurementData);
   }
 
-  private handleImageRendered(event: any): void {
+  private handleImageRendered(event: Event): void {
     // Update temporal display if needed
-    this.emit('imageRendered', event.detail);
+    this.emit('imageRendered', (event as CustomEvent).detail);
   }
 
-  private handleWorkerResult(type: string, result: any): void {
+  private handleWorkerResult(type: string, result: unknown): void {
     this.emit('workerResult', { type, result });
   }
 
-  private async performTemporalAnalysis(measurementData: any): Promise<void> {
+  private async performTemporalAnalysis(measurementData: Record<string, unknown>): Promise<void> {
     if (!this.activeElement) return;
 
     const analysisId = uuidv4();
@@ -661,7 +665,7 @@ class TemporalImagingTools {
         seriesId: currentSeries.id,
         analysisType: 'temporal',
         timestamp: new Date(),
-        roi: this.extractROIInfo(measurementData)
+        roi: this.extractROIInfo(measurementData) as { coordinates: number[][]; area: number; centroid: [number, number]; }
       };
 
       // Perform different types of temporal analysis
@@ -721,20 +725,20 @@ class TemporalImagingTools {
     return seriesArray.length > 0 ? seriesArray[0] : null;
   }
 
-  private extractROIInfo(measurementData: any): any {
+  private extractROIInfo(measurementData: Record<string, unknown>): Record<string, unknown> {
     // Extract region of interest information from measurement data
-    const coordinates = measurementData.handles?.points || measurementData.coordinates || [];
+    const coordinates = ((measurementData.handles as Record<string, unknown>)?.points as Record<string, unknown>[]) || (measurementData.coordinates as Record<string, unknown>[]) || [];
     
-    if (coordinates.length === 0) return null;
+    if (coordinates.length === 0) return {} as Record<string, unknown>;
     
     // Calculate area and centroid
     let area = 0;
     let centroidX = 0;
     let centroidY = 0;
     
-    coordinates.forEach((point: any) => {
-      centroidX += point.x || point[0];
-      centroidY += point.y || point[1];
+    coordinates.forEach((point: Record<string, unknown>) => {
+      centroidX += (point.x as number) || (point[0] as number);
+      centroidY += (point.y as number) || (point[1] as number);
     });
     
     centroidX /= coordinates.length;
@@ -752,16 +756,16 @@ class TemporalImagingTools {
     };
   }
 
-  private calculatePolygonArea(coordinates: any[]): number {
+  private calculatePolygonArea(coordinates: Record<string, unknown>[]): number {
     let area = 0;
     const n = coordinates.length;
     
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n;
-      const xi = coordinates[i].x || coordinates[i][0];
-      const yi = coordinates[i].y || coordinates[i][1];
-      const xj = coordinates[j].x || coordinates[j][0];
-      const yj = coordinates[j].y || coordinates[j][1];
+      const xi = (coordinates[i].x as number) || (coordinates[i][0] as number);
+      const yi = (coordinates[i].y as number) || (coordinates[i][1] as number);
+      const xj = (coordinates[j].x as number) || (coordinates[j][0] as number);
+      const yj = (coordinates[j].y as number) || (coordinates[j][1] as number);
       
       area += xi * yj - xj * yi;
     }
@@ -1010,7 +1014,7 @@ class TemporalImagingTools {
     return [headers, ...rows].map(row => row.join(',')).join('\n');
   }
 
-  private exportToExcel(data: any): string {
+  private exportToExcel(data: unknown): string {
     // Simplified Excel export - in practice, would use a library like xlsx
     return JSON.stringify(data, null, 2);
   }
@@ -1044,14 +1048,14 @@ class TemporalImagingTools {
   }
 
   // Event system
-  public on(event: string, callback: Function): void {
+  public on(event: string, callback: (...args: unknown[]) => void): void {
     if (!this.eventListeners.has(event)) {
       this.eventListeners.set(event, []);
     }
     this.eventListeners.get(event)!.push(callback);
   }
 
-  public off(event: string, callback: Function): void {
+  public off(event: string, callback: (...args: unknown[]) => void): void {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
       const index = listeners.indexOf(callback);
@@ -1061,7 +1065,7 @@ class TemporalImagingTools {
     }
   }
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: unknown): void {
     const listeners = this.eventListeners.get(event);
     if (listeners) {
       listeners.forEach(callback => {
@@ -1091,7 +1095,7 @@ export const TemporalImagingUI: React.FC<{
   useEffect(() => {
     const handlePlaybackStarted = () => setIsPlaying(true);
     const handlePlaybackStopped = () => setIsPlaying(false);
-    const handleFrameChanged = (data: any) => setCurrentFrame(data.frameNumber);
+    const handleFrameChanged = (data: { frameNumber: number }) => setCurrentFrame(data.frameNumber);
     const handleAnalysisComplete = (result: TemporalAnalysisResult) => {
       setAnalysisResults(prev => [...prev, result]);
       onAnalysisComplete?.(result);
@@ -1099,14 +1103,14 @@ export const TemporalImagingUI: React.FC<{
 
     temporalTools.on('playbackStarted', handlePlaybackStarted);
     temporalTools.on('playbackStopped', handlePlaybackStopped);
-    temporalTools.on('frameChanged', handleFrameChanged);
-    temporalTools.on('temporalAnalysisComplete', handleAnalysisComplete);
+    temporalTools.on('frameChanged', handleFrameChanged as (...args: unknown[]) => void);
+    temporalTools.on('temporalAnalysisComplete', handleAnalysisComplete as (...args: unknown[]) => void);
 
     return () => {
       temporalTools.off('playbackStarted', handlePlaybackStarted);
       temporalTools.off('playbackStopped', handlePlaybackStopped);
-      temporalTools.off('frameChanged', handleFrameChanged);
-      temporalTools.off('temporalAnalysisComplete', handleAnalysisComplete);
+      temporalTools.off('frameChanged', handleFrameChanged as (...args: unknown[]) => void);
+      temporalTools.off('temporalAnalysisComplete', handleAnalysisComplete as (...args: unknown[]) => void);
     };
   }, [temporalTools, onAnalysisComplete]);
 

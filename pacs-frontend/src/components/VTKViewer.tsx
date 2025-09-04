@@ -16,7 +16,7 @@ const VTKViewer: React.FC<VTKViewerProps> = ({
   className = '' 
 }) => {
   const vtkContainerRef = useRef<HTMLDivElement>(null);
-  const renderWindowRef = useRef<any>(null);
+  const renderWindowRef = useRef<{ delete(): void } | null>(null);
 
   useEffect(() => {
     if (!vtkContainerRef.current) return;
@@ -47,7 +47,7 @@ const VTKViewer: React.FC<VTKViewerProps> = ({
       actor.setMapper(mapper);
 
       // Add the actor to the renderer
-      renderer.addActor(actor);
+      renderer.addActor(actor as any);
       renderer.resetCamera();
       renderWindow.render();
 

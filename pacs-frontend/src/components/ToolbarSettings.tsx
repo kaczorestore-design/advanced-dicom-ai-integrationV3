@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Separator } from './ui/separator';
@@ -180,7 +180,7 @@ export default function ToolbarSettings({ config, onConfigChange, isOpen, onClos
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-3">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Toolbar Position</label>
-                <Select value={localConfig.position} onValueChange={(value: any) => handleConfigUpdate({ position: value })}>
+                <Select value={localConfig.position} onValueChange={(value: ToolbarConfig['position']) => handleConfigUpdate({ position: value })}>
                   <SelectTrigger className="bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600">
                     <SelectValue />
                   </SelectTrigger>

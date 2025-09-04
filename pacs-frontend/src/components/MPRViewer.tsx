@@ -113,8 +113,9 @@ const MPRViewer: React.FC<MPRViewerProps> = ({
               // Apply initial window/level
               const preset = windowLevelPresets[activePreset as keyof typeof windowLevelPresets];
               if (preset) {
-                volumeActor.getProperty().setColorWindow(preset.windowWidth);
-                volumeActor.getProperty().setColorLevel(preset.windowCenter);
+                const property = volumeActor.getProperty() as any;
+                property.setColorWindow?.(preset.windowWidth);
+                property.setColorLevel?.(preset.windowCenter);
               }
             },
           },
@@ -374,7 +375,7 @@ const MPRViewer: React.FC<MPRViewerProps> = ({
                     key={mode.mode}
                     size="sm"
                     variant={renderingMode === mode.mode ? 'default' : 'outline'}
-                    onClick={() => setRenderingMode(mode.mode as any)}
+                    onClick={() => setRenderingMode(mode.mode as 'mpr' | 'mip' | 'volume')}
                     className="px-2"
                   >
                     <mode.icon className="w-4 h-4" />

@@ -211,7 +211,7 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
   
   const canvasRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
-  const renderingEngineRef = useRef<any>(null);
+  const renderingEngineRef = useRef<Record<string, unknown> | null>(null);
 
   // Initialize volume rendering
   useEffect(() => {
@@ -228,7 +228,7 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
         
         // Create rendering engine
         const renderingEngine = new RenderingEngine('volumeRenderingEngine');
-        renderingEngineRef.current = renderingEngine;
+        renderingEngineRef.current = renderingEngine as unknown as Record<string, unknown>;
 
         // Create viewport
         if (!canvasRef.current) {
@@ -251,12 +251,12 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
         setRenderingProgress(30);
         
         // Apply rendering configuration
-        await applyRenderingConfig(viewport, renderingConfig);
+        await applyRenderingConfig(viewport as unknown as Record<string, unknown>, renderingConfig);
         
         setRenderingProgress(70);
         
         // Apply transfer function
-        await applyTransferFunction(viewport, transferFunction);
+        await applyTransferFunction(viewport as unknown as Record<string, unknown>, transferFunction);
         
         setRenderingProgress(100);
         setIsRendering(false);
@@ -277,13 +277,13 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
       if (renderingEngineRef.current) {
-        renderingEngineRef.current.destroy();
+        (renderingEngineRef.current as Record<string, unknown> & { destroy(): void }).destroy();
       }
     };
   }, [volumeData, theme]);
 
   // Apply rendering configuration
-  const applyRenderingConfig = async (viewport: any, config: VolumeRenderingConfig) => {
+  const applyRenderingConfig = async (viewport: Record<string, unknown>, config: VolumeRenderingConfig) => {
     if (!viewport) return;
 
     try {
@@ -295,7 +295,7 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
         'average': 'AVERAGE_INTENSITY_PROJECTION'
       };
 
-      await viewport.setProperties({
+      await (viewport as unknown as { setProperties(props: Record<string, unknown>): Promise<void> }).setProperties({
         renderingMode: renderingModeMap[config.renderingMode],
         gpuAcceleration: config.gpuAcceleration,
         ambientOcclusion: config.ambientOcclusion,
@@ -312,17 +312,17 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
             position: plane.position
           }));
         
-        await viewport.setClippingPlanes(clippingPlanes);
+        await (viewport as unknown as { setClippingPlanes(planes: Record<string, unknown>[]): Promise<void> }).setClippingPlanes(clippingPlanes);
       }
 
-      viewport.render();
+      (viewport as unknown as { render(): void }).render();
     } catch (error) {
       console.error('Failed to apply rendering configuration:', error);
     }
   };
 
   // Apply transfer function
-  const applyTransferFunction = async (viewport: any, tf: TransferFunction) => {
+  const applyTransferFunction = async (viewport: Record<string, unknown>, tf: TransferFunction) => {
     if (!viewport) return;
 
     try {
@@ -350,13 +350,13 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
         ])).flat()
       };
 
-      await viewport.setProperties({
+      await (viewport as unknown as { setProperties(props: Record<string, unknown>): Promise<void> }).setProperties({
         colorTransferFunction,
         opacityTransferFunction,
         gradientOpacityTransferFunction
       });
 
-      viewport.render();
+      (viewport as unknown as { render(): void }).render();
     } catch (error) {
       console.error('Failed to apply transfer function:', error);
     }
@@ -366,13 +366,13 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
   const startPerformanceMonitoring = () => {
     const monitor = () => {
       if (renderingEngineRef.current) {
-        const stats = renderingEngineRef.current.getPerformanceStats?.() || {
+        const stats = (renderingEngineRef.current as unknown as { getPerformanceStats?(): Record<string, number> }).getPerformanceStats?.() || {
           fps: Math.random() * 60,
           renderTime: Math.random() * 16,
           memoryUsage: Math.random() * 100
         };
         
-        setPerformanceStats(stats);
+        setPerformanceStats(stats as { fps: number; renderTime: number; memoryUsage: number });
       }
       
       animationFrameRef.current = requestAnimationFrame(monitor);
@@ -392,8 +392,8 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
 
     // Apply changes to viewport
     if (renderingEngineRef.current) {
-      const viewport = renderingEngineRef.current.getViewport('VOLUME_VIEWPORT');
-      applyRenderingConfig(viewport, newConfig);
+      const viewport = (renderingEngineRef.current as unknown as { getViewport(id: string): Record<string, unknown> }).getViewport('VOLUME_VIEWPORT');
+      applyRenderingConfig(viewport as unknown as Record<string, unknown>, newConfig);
     }
   }, [renderingConfig, onRenderingChange]);
 
@@ -408,8 +408,8 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
 
     // Apply changes to viewport
     if (renderingEngineRef.current) {
-      const viewport = renderingEngineRef.current.getViewport('VOLUME_VIEWPORT');
-      applyTransferFunction(viewport, newTF);
+      const viewport = (renderingEngineRef.current as unknown as { getViewport(id: string): Record<string, unknown> }).getViewport('VOLUME_VIEWPORT');
+      applyTransferFunction(viewport as unknown as Record<string, unknown>, newTF);
     }
   }, [transferFunction, onTransferFunctionChange]);
 
@@ -524,7 +524,7 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
                   <label className="text-sm font-medium">Rendering Mode</label>
                   <Select 
                     value={renderingConfig.renderingMode} 
-                    onValueChange={(value: any) => updateRenderingConfig({ renderingMode: value })}
+                    onValueChange={(value: string) => updateRenderingConfig({ renderingMode: value as VolumeRenderingConfig['renderingMode'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -542,7 +542,7 @@ const VolumeRenderer: React.FC<VolumeRendererProps> = ({
                   <label className="text-sm font-medium">Quality</label>
                   <Select 
                     value={renderingConfig.quality} 
-                    onValueChange={(value: any) => updateRenderingConfig({ quality: value })}
+                    onValueChange={(value: string) => updateRenderingConfig({ quality: value as VolumeRenderingConfig['quality'] })}
                   >
                     <SelectTrigger>
                       <SelectValue />

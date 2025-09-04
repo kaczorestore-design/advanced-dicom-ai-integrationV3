@@ -117,7 +117,7 @@ export default function DicomViewer() {
   const [study, setStudy] = useState<Study | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [measurements] = useState<Measurement[]>([]);
+  const [_measurements] = useState<Measurement[]>([]);
   const [activeTool, setActiveTool] = useState<string>('wwwc');
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -132,7 +132,7 @@ export default function DicomViewer() {
   });
   const [isInitialized, setIsInitialized] = useState(false);
   const [viewMode, setViewMode] = useState<'2d' | '3d' | 'mpr' | 'vr' | 'mip'>('2d');
-  const [, setMprViews] = useState<{axial: HTMLElement | null, coronal: HTMLElement | null, sagittal: HTMLElement | null}>({
+  const [, ] = useState<{axial: HTMLElement | null, coronal: HTMLElement | null, sagittal: HTMLElement | null}>({
     axial: null,
     coronal: null,
     sagittal: null
@@ -143,9 +143,9 @@ export default function DicomViewer() {
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
   const [showDICOMNetworking, setShowDICOMNetworking] = useState(false);
-  const [, setShowAIHeatmap] = useState(false);
+  const [, ] = useState(false);
   const [seriesSynchronization, setSeriesSynchronization] = useState(false);
-  const [, setHangingProtocol] = useState<string>('default');
+  const [, ] = useState<string>('default');
   const [keyboardShortcuts] = useState(true);
   
   // VTK.js state for 3D visualization (simplified) - temporarily disabled
@@ -156,8 +156,8 @@ export default function DicomViewer() {
   
 
   
-  const persistedMeasurements = measurements;
-  const measurementsLoading = false;
+  // const persistedMeasurements = measurements;
+  // const measurementsLoading = false;
   const deleteMeasurement = (id: string) => {
     console.log('Deleting measurement:', id);
   };

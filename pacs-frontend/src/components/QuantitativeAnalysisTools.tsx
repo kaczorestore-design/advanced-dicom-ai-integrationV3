@@ -78,7 +78,7 @@ export interface AnalysisConfig {
 export class QuantitativeAnalysisTools {
   private analyses: Map<string, QuantitativeMetrics> = new Map();
   private activeElement: HTMLElement | null = null;
-  private eventListeners: { [key: string]: Function[] } = {};
+  private eventListeners: { [key: string]: ((data: unknown) => void)[] } = {};
   private isInitialized = false;
   private analysisWorker: Worker | null = null;
 
@@ -145,7 +145,7 @@ export class QuantitativeAnalysisTools {
     }
   }
 
-  private handleWorkerResult(type: string, result: any): void {
+  private handleWorkerResult(type: string, result: unknown): void {
     this.emit('workerResult', { type, result });
   }
 
@@ -255,20 +255,20 @@ export class QuantitativeAnalysisTools {
     return sr;
   }
 
-  public on(event: string, callback: Function): void {
+  public on(event: string, callback: (data: unknown) => void): void {
     if (!this.eventListeners[event]) {
       this.eventListeners[event] = [];
     }
     this.eventListeners[event].push(callback);
   }
 
-  public off(event: string, callback: Function): void {
+  public off(event: string, callback: (data: unknown) => void): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event] = this.eventListeners[event].filter(cb => cb !== callback);
     }
   }
 
-  private emit(event: string, data: any): void {
+  private emit(event: string, data: unknown): void {
     if (this.eventListeners[event]) {
       this.eventListeners[event].forEach(callback => callback(data));
     }

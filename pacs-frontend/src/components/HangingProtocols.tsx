@@ -500,17 +500,17 @@ export const HangingProtocols: React.FC<HangingProtocolsProps> = ({
     
     const matchingProtocols = protocols.filter(protocol => {
       return protocol.conditions.every(condition => {
-        const value = study[condition.attribute];
+        const value = (study as unknown as Record<string, unknown>)[condition.attribute];
         
         switch (condition.operator) {
           case 'equals':
             return value === condition.value;
           case 'contains':
-            return value && value.toString().toLowerCase().includes(condition.value.toLowerCase());
+            return value && value.toString().toLowerCase().includes((condition.value as string).toLowerCase());
           case 'greaterThan':
-            return value > condition.value;
+            return typeof value === 'number' && typeof condition.value === 'number' && value > condition.value;
           case 'lessThan':
-            return value < condition.value;
+            return typeof value === 'number' && typeof condition.value === 'number' && value < condition.value;
           case 'exists':
             return value !== undefined && value !== null;
           default:
@@ -1025,10 +1025,7 @@ export const HangingProtocols: React.FC<HangingProtocolsProps> = ({
                                           }
                                         } : v
                                       );
-                                      onViewportConfigChanged?.({
-                                          ...selectedProtocol,
-                                          viewports: updatedViewports
-                                      });
+                                      onViewportConfigChanged?.(updatedViewports as ViewportConfiguration[]);
                                     }}
                                   />
                                   <span className="text-sm capitalize">{key}</span>

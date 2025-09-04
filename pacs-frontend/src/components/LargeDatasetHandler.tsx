@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { EventEmitter } from 'events';
-import EnhancedMemoryManager, { MemorySegment, LargeDatasetStrategy } from './EnhancedMemoryManager';
+import EnhancedMemoryManager from './EnhancedMemoryManager';
 import PerformanceOptimizer from './PerformanceOptimizer';
 import EnhancedDICOMNetwork from './EnhancedDICOMNetwork';
 
@@ -114,15 +113,13 @@ export interface LargeDatasetHandlerConfig {
 export class LargeDatasetHandler extends EventEmitter {
   private config: LargeDatasetHandlerConfig;
   private memoryManager: EnhancedMemoryManager;
-  private performanceOptimizer?: PerformanceOptimizer;
-  private networkManager?: EnhancedDICOMNetwork;
   private datasets: Map<string, DatasetMetadata> = new Map();
   private chunks: Map<string, Map<number, DatasetChunk>> = new Map();
   private loadingQueue: Map<string, DatasetChunk[]> = new Map();
   private activeLoads: Map<string, Promise<void>> = new Map();
   private viewportInfo: ViewportInfo | null = null;
   private loadingProgress: Map<string, LoadingProgress> = new Map();
-  private metricsInterval: any;
+  private metricsInterval: NodeJS.Timeout | null = null;
   private isInitialized = false;
 
   constructor(
@@ -430,7 +427,7 @@ export class LargeDatasetHandler extends EventEmitter {
       const startTime = Date.now();
       
       // Simulate chunk loading (in real implementation, load from network/storage)
-      const chunkData = await this.fetchChunkData(dataSource, chunk.offset, chunk.size);
+      await this.fetchChunkData(dataSource, chunk.offset, chunk.size);
       
       // Allocate memory for chunk
       const segmentId = await this.memoryManager.allocateMemory(
@@ -471,7 +468,7 @@ export class LargeDatasetHandler extends EventEmitter {
     }
   }
 
-  private async fetchChunkData(dataSource: string, offset: number, size: number): Promise<Uint8Array> {
+  private async fetchChunkData(_dataSource: string, _offset: number, size: number): Promise<Uint8Array> {
     // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 100 + Math.random() * 200));
     
@@ -593,12 +590,12 @@ export class LargeDatasetHandler extends EventEmitter {
     if (!this.viewportInfo) return;
     
     // Predict which chunks will be needed based on current viewport and movement
-    for (const [datasetId, chunks] of this.chunks) {
+    for (const [_datasetId, chunks] of this.chunks) {
       const predictedChunks = this.predictNextChunks(chunks, this.viewportInfo);
       
       // Preload predicted chunks if memory allows
       if (!this.isMemoryThresholdExceeded()) {
-        this.preloadChunks(datasetId, predictedChunks);
+        this.preloadChunks(_datasetId, predictedChunks);
       }
     }
   }
@@ -632,12 +629,12 @@ export class LargeDatasetHandler extends EventEmitter {
   }
 
   // Event handlers
-  private handleMemoryAllocated(event: any): void {
+  private handleMemoryAllocated(event: Record<string, unknown>): void {
     // Handle memory allocation events
     this.emit('memoryAllocated', event);
   }
 
-  private handleMemoryDeallocated(event: any): void {
+  private handleMemoryDeallocated(event: Record<string, unknown>): void {
     // Handle memory deallocation events
     this.emit('memoryDeallocated', event);
   }
@@ -648,12 +645,10 @@ export class LargeDatasetHandler extends EventEmitter {
   }
 
   // Public API methods
-  public setPerformanceOptimizer(optimizer: PerformanceOptimizer): void {
-    this.performanceOptimizer = optimizer;
+  public setPerformanceOptimizer(_optimizer: PerformanceOptimizer): void {
   }
 
-  public setNetworkManager(network: EnhancedDICOMNetwork): void {
-    this.networkManager = network;
+  public setNetworkManager(_network: EnhancedDICOMNetwork): void {
   }
 
   public setMemoryManager(memoryManager: EnhancedMemoryManager): void {
@@ -672,7 +667,7 @@ export class LargeDatasetHandler extends EventEmitter {
 
   private optimizeForViewport(viewport: ViewportInfo): void {
     // Adjust loading priorities based on viewport
-    for (const [datasetId, chunks] of this.chunks) {
+    for (const [_datasetId, chunks] of this.chunks) {
       for (const chunk of chunks.values()) {
         chunk.priority = this.calculateViewportBasedPriority(chunk, viewport);
       }
@@ -732,7 +727,7 @@ export class LargeDatasetHandler extends EventEmitter {
       }
 
       // Cancel active loads
-      for (const [datasetId, promise] of this.activeLoads) {
+      for (const [datasetId, _promise] of this.activeLoads) {
         // In real implementation, cancel the promise
         this.activeLoads.delete(datasetId);
       }

@@ -203,7 +203,7 @@ export const withErrorBoundary = <P extends object>(
 
 // Hook for error reporting in functional components
 export const useErrorHandler = () => {
-  const handleError = React.useCallback((error: Error, errorInfo?: any) => {
+  const handleError = React.useCallback((error: Error, errorInfo?: Record<string, unknown>) => {
     console.error('Error caught by useErrorHandler:', error, errorInfo);
     
     // Log to external service in production
