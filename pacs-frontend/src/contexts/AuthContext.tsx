@@ -52,9 +52,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Check if token is valid (not expired)
   const isTokenValid = useCallback(() => {
-    if (!token || !tokenExpiry) return false
-    return Date.now() < tokenExpiry
-  }, [token, tokenExpiry])
+  if (!token) return false
+  
+  try {
+    // Parse JWT token to check expiration
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const expiryTime = payload.exp * 1000 // Convert to milliseconds
+    return Date.now() < expiryTime
+  } catch (error) {
+    console.error('Error parsing token:', error)
+    return false
+  }
+}, [token])
 
   // Refresh token function
   const refreshToken = useCallback(async (): Promise<boolean> => {
@@ -76,6 +85,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         setToken(newToken)
         setTokenExpiry(expiryTime)
+        console.log('Token refreshed successfully', newToken);
         localStorage.setItem('token', newToken)
         localStorage.setItem('tokenExpiry', expiryTime.toString())
         
@@ -93,45 +103,51 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [token, API_URL])
 
   const fetchUserInfo = useCallback(async (authToken: string) => {
-    // Don't make request if token is empty or invalid
-    if (!authToken || authToken.trim() === '') {
-      console.warn('No valid token provided, skipping user info fetch')
-      setLoading(false)
-      return
-    }
+  if (!authToken || authToken.trim() === '') {
+    console.warn('No valid token provided, skipping user info fetch')
+    setLoading(false)
+    return
+  }
 
-    try {
-      const response = await fetch(`${API_URL}/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-      })
+  try {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
 
-      if (response.ok) {
-        const userData = await response.json()
-        setUser(userData)
-      } else if (response.status === 401) {
-        // Token is invalid or expired
-        console.warn('Token expired or invalid, logging out')
-        setUser(null)
-        setToken(null)
-        localStorage.removeItem('token')
-      } else {
-        console.error('Failed to fetch user info:', response.status)
-        localStorage.removeItem('token')
-        setToken(null)
+    if (response.ok) {
+      const userData = await response.json()
+      setUser(userData)
+    } else if (response.status === 401) {
+      console.warn('Token expired or invalid, attempting refresh...')
+      const refreshSuccess = await refreshToken()
+      if (!refreshSuccess) {
+        console.warn('Refresh failed, logging out')
+        logout()
       }
-    } catch (error) {
-      console.error('Error fetching user info:', error)
-      // Clear token on any error to prevent repeated failed requests
-      console.warn('Clearing token due to authentication error')
-      localStorage.removeItem('token')
-      setToken(null)
-    } finally {
-      setLoading(false)
+    } else {
+      console.error('Failed to fetch user info:', response.status)
+      // Don't logout immediately, try refresh first
+      const refreshSuccess = await refreshToken()
+      if (!refreshSuccess) {
+        logout()
+      }
     }
-  }, [API_URL])
+  } catch (error) {
+    console.error('Error fetching user info:', error)
+    // Try to refresh token on network errors
+    try {
+      await refreshToken()
+    } catch (refreshError) {
+      console.error('Refresh also failed:', refreshError)
+      logout()
+    }
+  } finally {
+    setLoading(false)
+  }
+}, [API_URL, refreshToken, logout])
 
   useEffect(() => {
     const savedToken = localStorage.getItem('token')
@@ -194,6 +210,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         setToken(authToken)
         setTokenExpiry(expiryTime)
+        console.log('Login successful, token set', authToken)
         localStorage.setItem('token', authToken)
         localStorage.setItem('tokenExpiry', expiryTime.toString())
         

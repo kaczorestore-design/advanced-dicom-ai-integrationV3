@@ -43,9 +43,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = now + expires_delta
     else:
         expire = now + timedelta(minutes=15)
-    to_encode.update(
-        {"exp": expire.timestamp(), "iat": now.timestamp(), "type": "access_token"}
-    )
+    
+    # Use datetime for exp, not timestamp
+    to_encode.update({
+        "exp": expire,  # Use datetime object
+        "iat": now,
+        "type": "access_token"
+    })
+    
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -73,13 +78,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
                 details={"expected_type": "access_token", "received_type": token_type},
             )
 
-        # Check if token is expired
-        if exp and datetime.utcnow().timestamp() > exp:
-            raise AuthenticationError(
-                message="Token has expired",
-                details={"expired_at": datetime.fromtimestamp(exp).isoformat()},
-            )
-
+        # JWT.decode already checks expiration automatically
         return username
     except JWTError as e:
         raise AuthenticationError(

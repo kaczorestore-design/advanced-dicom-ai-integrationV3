@@ -77,6 +77,19 @@ import * as dicomParser from 'dicom-parser';
 import * as cornerstone from '@cornerstonejs/core';
 import { getWindowLevelPresets } from '../utils/cornerstone3d-init';
 
+// 3D Viewer VTK.js
+import '@kitware/vtk.js/Rendering/Profiles/Volume';
+import vtkFullScreenRenderWindow from '@kitware/vtk.js/Rendering/Misc/FullScreenRenderWindow';
+import vtkVolume from '@kitware/vtk.js/Rendering/Core/Volume';
+import vtkVolumeMapper from '@kitware/vtk.js/Rendering/Core/VolumeMapper';
+import vtkImageData from '@kitware/vtk.js/Common/DataModel/ImageData';
+import vtkDataArray from '@kitware/vtk.js/Common/Core/DataArray';
+import vtkColorTransferFunction from '@kitware/vtk.js/Rendering/Core/ColorTransferFunction';
+import vtkPiecewiseFunction from '@kitware/vtk.js/Common/DataModel/PiecewiseFunction';
+import vtkVolumeProperty from '@kitware/vtk.js/Rendering/Core/VolumeProperty';
+import { VtkDataTypes } from '@kitware/vtk.js/Common/Core/DataArray/Constants';
+
+
 
 
 interface Study {
@@ -138,6 +151,10 @@ export default function DicomViewer() {
   const viewerRef = useRef<HTMLDivElement>(null);
   const cornerstoneElementRef = useRef<HTMLDivElement>(null);
   const vtkContainerRef = useRef<HTMLDivElement>(null);
+  // Add these new state variables for better tracking
+const [initializationAttempts, setInitializationAttempts] = useState(0);
+const [initializationError, setInitializationError] = useState<string | null>(null);
+
   
   const [study, setStudy] = useState<Study | null>(null);
   const [loading, setLoading] = useState(true);
@@ -205,6 +222,16 @@ export default function DicomViewer() {
   const [toolbarSettingsOpen, setToolbarSettingsOpen] = useState(false);
   const [histogramData, setHistogramData] = useState<{bins: number[], values: number[]} | null>(null);
   const [showHistogram, setShowHistogram] = useState(false);
+  // const [imageData, setImageData] = useState(null);
+
+
+
+  // 3D Viewer state
+  const [vtkRenderWindow, setVtkRenderWindow] = useState<any>(null);
+  const [vtkRenderer, setVtkRenderer] = useState<any>(null);
+  const [vtkVolumeActor, setVtkVolumeActor] = useState<any>(null);
+  const [volumeData, setVolumeData] = useState<any>(null);
+
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -797,108 +824,64 @@ export default function DicomViewer() {
     }
   }, [viewportLayout, viewMode, isInitialized, imageIds, distributeImagesAcrossViewports]);
 
-  useEffect(() => {
-    console.log('🔍 DicomViewer useEffect triggered, viewMode:', viewMode, 'isInitialized:', isInitialized);
-    console.log('🔍 cornerstoneElementRef.current:', cornerstoneElementRef.current);
-    console.log('🔍 Available modules:', {
-      RenderingEngine: typeof RenderingEngine,
-      csToolsInit: typeof csToolsInit,
-      cornerstoneDICOMImageLoader: typeof cornerstoneDICOMImageLoader,
-      dicomParser: typeof dicomParser
-    });
+  // Replace your existing initialization useEffect with this:
+// Replace your existing initialization useEffect with this updated version:
+useEffect(() => {
+  console.log('🔍 DicomViewer initialization useEffect triggered:', {
+    viewMode,
+    isInitialized,
+    hasElement: viewMode === '2d' ? !!cornerstoneElementRef.current : !!vtkContainerRef.current,
+    attempts: initializationAttempts
+  });
 
-    const initializeCornerstone = async () => {
-      try {
-        if (!cornerstoneElementRef.current) {
-          console.log('❌ cornerstoneElementRef.current is null, skipping initialization');
-          return;
-        }
+  const initializeCornerstone = async () => {
+    try {
+      // Check appropriate ref based on view mode
+      const targetElement = viewMode === '2d' ? cornerstoneElementRef.current : vtkContainerRef.current;
+      
+      if (!targetElement) {
+        console.log(`❌ ${viewMode === '2d' ? 'cornerstoneElementRef' : 'vtkContainerRef'}.current is null, will retry...`);
+        return;
+      }
 
-        console.log('🔧 Initializing Cornerstone.js 3D...');
-        
-        // Initialize DICOM Image Loader with comprehensive error handling
+      console.log(`🔧 Initializing ${viewMode.toUpperCase()} viewer...`);
+      setInitializationError(null);
+
+      if (viewMode === '2d') {
+        // Your existing 2D initialization code stays the same
         cornerstoneDICOMImageLoader.external.cornerstone = cornerstone;
         cornerstoneDICOMImageLoader.external.dicomParser = dicomParser;
-        
-        // Register the wadouri and wadors image loaders
-        try {
-          imageLoader.registerImageLoader('wadouri', cornerstoneDICOMImageLoader.wadouri.loadImage);
-          imageLoader.registerImageLoader('wadors', cornerstoneDICOMImageLoader.wadors.loadImage);
-          console.log('✅ DICOM image loaders registered successfully');
-        } catch (loaderError) {
-          console.error('❌ Failed to register DICOM image loaders:', loaderError);
-        }
-        
-        // Configure DICOM image loader with storage access disabled
+
+        imageLoader.registerImageLoader('wadouri', cornerstoneDICOMImageLoader.wadouri.loadImage);
+        imageLoader.registerImageLoader('wadors', cornerstoneDICOMImageLoader.wadors.loadImage);
+        console.log('✅ DICOM image loaders registered successfully');
+
         cornerstoneDICOMImageLoader.configure({
           beforeSend: function(xhr: XMLHttpRequest) {
             if (token) {
               xhr.setRequestHeader('Authorization', `Bearer ${token}`);
             }
-            // Add CORS headers for cross-origin requests
-            xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
-            xhr.setRequestHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-            xhr.setRequestHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
           },
           useWebWorkers: false,
           strict: false,
-          // Completely disable storage access to prevent context errors
           storageAccess: false,
-          // Disable caching that might use storage
           maxWebWorkers: 0,
-          // Use memory-only caching
           decodeConfig: {
             convertFloatPixelDataToInt: false,
             use16BitDataType: false
           }
         });
-        
-        // Override storage methods to prevent access errors
-        try {
-          // Check if storage is available
-          const testKey = '__storage_test__';
-          window.localStorage.setItem(testKey, 'test');
-          window.localStorage.removeItem(testKey);
-          console.log('✅ Storage access available');
-        } catch (storageError) {
-          console.warn('⚠️ Storage access restricted, using memory-only mode:', (storageError as Error).message);
-          
-          // Override storage methods with no-op functions
-          const noOpStorage = {
-            getItem: () => null,
-            setItem: () => {},
-            removeItem: () => {},
-            clear: () => {},
-            length: 0,
-            key: () => null
-          };
-          
-          // Replace localStorage and sessionStorage if they cause errors
-          try {
-            Object.defineProperty(window, 'localStorage', {
-              value: noOpStorage,
-              writable: false
-            });
-            Object.defineProperty(window, 'sessionStorage', {
-              value: noOpStorage,
-              writable: false
-            });
-          } catch (defineError) {
-            console.warn('Could not override storage objects:', (defineError as Error).message);
-          }
-        }
 
-        // Initialize Cornerstone Core first
         await csRenderInit();
+        console.log('✅ Cornerstone Core initialized');
         
-        // Initialize Cornerstone Tools
         await csToolsInit();
-        
-        // Create rendering engine
+        console.log('✅ Cornerstone Tools initialized');
+
         const renderingEngineId = 'myRenderingEngine';
-        const renderingEngine = new RenderingEngine(renderingEngineId);
-        
-        // Create viewport
+        const newRenderingEngine = new RenderingEngine(renderingEngineId);
+        console.log('✅ Rendering Engine created');
+
         const viewportId = 'CT_STACK';
         const viewportInput = {
           viewportId,
@@ -908,86 +891,126 @@ export default function DicomViewer() {
             background: [0.2, 0.3, 0.4] as Types.Point3
           }
         };
-        
-        renderingEngine.enableElement(viewportInput);
-        
-        // Get the stack viewport
-        const viewport = renderingEngine.getViewport(viewportId) as Types.IStackViewport;
-        
-        // Create tool group
+
+        newRenderingEngine.enableElement(viewportInput);
+        console.log('✅ Viewport enabled');
+
+        const newViewport = newRenderingEngine.getViewport(viewportId) as Types.IStackViewport;
+        console.log('✅ Stack viewport obtained');
+
+        // Tool setup code...
         const toolGroupId = 'myToolGroup';
-        const toolGroup = ToolGroupManager.createToolGroup(toolGroupId);
-        
-        // Add tools to the tool group
-        toolGroup?.addTool(WindowLevelTool.toolName);
-        toolGroup?.addTool(PanTool.toolName);
-        toolGroup?.addTool(ZoomTool.toolName);
-        toolGroup?.addTool(StackScrollMouseWheelTool.toolName);
-        toolGroup?.addTool(LengthTool.toolName);
-        toolGroup?.addTool(AngleTool.toolName);
-        toolGroup?.addTool(RectangleROITool.toolName);
-        toolGroup?.addTool(EllipticalROITool.toolName);
-        
-        // Set tool modes
-        toolGroup?.setToolActive(WindowLevelTool.toolName, {
+        const newToolGroup = ToolGroupManager.createToolGroup(toolGroupId);
+
+        newToolGroup?.addTool(WindowLevelTool.toolName);
+        newToolGroup?.addTool(PanTool.toolName);
+        newToolGroup?.addTool(ZoomTool.toolName);
+        newToolGroup?.addTool(StackScrollMouseWheelTool.toolName);
+        newToolGroup?.addTool(LengthTool.toolName);
+        newToolGroup?.addTool(AngleTool.toolName);
+        newToolGroup?.addTool(RectangleROITool.toolName);
+        newToolGroup?.addTool(EllipticalROITool.toolName);
+
+        newToolGroup?.setToolActive(WindowLevelTool.toolName, {
           bindings: [{ mouseButton: ToolsEnums.MouseBindings.Primary }]
         });
-        toolGroup?.setToolActive(PanTool.toolName, {
+        newToolGroup?.setToolActive(PanTool.toolName, {
           bindings: [{ mouseButton: ToolsEnums.MouseBindings.Auxiliary }]
         });
-        toolGroup?.setToolActive(ZoomTool.toolName, {
+        newToolGroup?.setToolActive(ZoomTool.toolName, {
           bindings: [{ mouseButton: ToolsEnums.MouseBindings.Secondary }]
         });
-        toolGroup?.setToolActive(StackScrollMouseWheelTool.toolName);
-        
-        // Add viewport to tool group
-        toolGroup?.addViewport(viewportId, renderingEngineId);
-        
-        // Store references
-        setRenderingEngine(renderingEngine);
-        setViewport(viewport);
-        setToolGroup(toolGroup as unknown as {
+        newToolGroup?.setToolActive(StackScrollMouseWheelTool.toolName);
+
+        newToolGroup?.addViewport(viewportId, renderingEngineId);
+        console.log('✅ Tools configured');
+
+        setRenderingEngine(newRenderingEngine);
+        setViewport(newViewport);
+        setToolGroup(newToolGroup as unknown as {
           id: string;
           setToolPassive: (toolName: string) => void;
           setToolActive: (toolName: string, options?: Record<string, unknown>) => void;
           [key: string]: unknown;
         });
-        
         setIsInitialized(true);
-        console.log('✅ Cornerstone 3D initialized successfully');
-        console.log('📊 Rendering Engine:', renderingEngine);
-        console.log('📊 Viewport:', viewport);
-        console.log('📊 Tool Group:', toolGroup);
-        
-      } catch (err) {
-        console.error('❌ Failed to initialize Cornerstone:', err);
-        setError('Failed to initialize DICOM viewer');
-      }
-    };
 
-    if (cornerstoneElementRef.current && !isInitialized) {
-      console.log('✅ Conditions met for initialization, calling initializeCornerstone()');
-      initializeCornerstone();
-    } else {
-      console.log('❌ Initialization conditions not met:', {
-        hasElement: !!cornerstoneElementRef.current,
-        isInitialized: isInitialized
-      });
+        console.log('✅ Cornerstone 2D initialized successfully');
+
+      } else if (viewMode === '3d' || viewMode === 'vr') {
+  // 3D/VR mode initialization with VTK.js
+  console.log('🔧 Initializing 3D/VR mode with VTK.js...');
+  
+  if (imageIds.length < 2) {
+    console.warn('⚠️ 3D reconstruction works better with multiple slices. Current slices:', imageIds.length);
+  }
+
+  try {
+    // Try VTK.js first
+    await initialize3DRendering();
+    setIsInitialized(true);
+    console.log('✅ VTK.js 3D initialized successfully');
+  } catch (vtkError) {
+    console.warn('⚠️ VTK.js failed, using fallback preview:', vtkError);
+    // Use fallback if VTK fails
+    await initializeSimple3DPreview();
+    setIsInitialized(true);
+    console.log('✅ 3D fallback preview initialized');
+  }
+}
+
+    } catch (err) {
+      console.error('❌ Failed to initialize viewer:', err);
+      setInitializationError(`Failed to initialize ${viewMode} viewer: ${(err as Error).message}`);
+      setError(`Failed to initialize ${viewMode} viewer`);
     }
+  };
 
-    return () => {
-      if (renderingEngine && isInitialized) {
-        try {
-          renderingEngine.destroy();
-          if (toolGroup) {
-            ToolGroupManager.destroyToolGroup(toolGroup.id as string);
-          }
-        } catch (err) {
-          console.error('Error cleaning up Cornerstone 3D:', err);
+  // Updated condition to check appropriate element
+const targetElement = viewMode === '2d' ? cornerstoneElementRef.current : vtkContainerRef.current;
+
+if (!isInitialized && targetElement && (viewMode === '2d' || viewMode === '3d' || viewMode === 'vr')) {
+  console.log(`✅ Conditions met for ${viewMode.toUpperCase()} initialization, calling initializeCornerstone()`);
+  initializeCornerstone();
+} else if (!isInitialized && !targetElement && initializationAttempts < 5) {
+  console.log(`⏳ ${viewMode.toUpperCase()} element not ready, scheduling retry...`, initializationAttempts);
+  const timeout = setTimeout(() => {
+    setInitializationAttempts(prev => prev + 1);
+  }, 100);
+  return () => clearTimeout(timeout);
+} else if (!isInitialized) {
+  console.log(`❌ ${viewMode.toUpperCase()} initialization conditions not met:`, {
+    hasElement: !!targetElement,
+    isInitialized,
+    viewMode,
+    attempts: initializationAttempts
+  });
+}
+
+  return () => {
+    if (renderingEngine && isInitialized) {
+      try {
+        renderingEngine.destroy();
+        if (toolGroup) {
+          ToolGroupManager.destroyToolGroup(toolGroup.id as string);
         }
+      } catch (err) {
+        console.error('Error cleaning up viewer:', err);
       }
-    };
-  }, [isInitialized, viewMode, token, renderingEngine, toolGroup]);
+    }
+  };
+}, [isInitialized, viewMode, token, initializationAttempts]);
+; // Removed renderingEngine and toolGroup dependencies
+
+// Add retry mechanism effect
+useEffect(() => {
+  if (initializationAttempts > 0 && initializationAttempts < 5 && !isInitialized) {
+    console.log(`🔄 Initialization retry ${initializationAttempts}/5`);
+  } else if (initializationAttempts >= 5 && !isInitialized) {
+    console.error('❌ Initialization failed after 5 attempts');
+    setError('Failed to initialize DICOM viewer after multiple attempts');
+  }
+}, [initializationAttempts, isInitialized]);
 
   // Removed duplicate useEffect hook - initialization is handled by the first useEffect
 
@@ -1288,38 +1311,80 @@ export default function DicomViewer() {
   }, [imageIds, viewport, renderingEngine, error]);
 
   useEffect(() => {
-    const conditions = {
-      isInitialized,
-      imageIdsLength: imageIds.length,
-      hasViewport: !!viewport,
-      hasRenderingEngine: !!renderingEngine,
-      viewMode,
-      currentImageIndex,
-      isValidImageIndex: currentImageIndex >= 0 && currentImageIndex < imageIds.length
-    };
+  const conditions = {
+    isInitialized,
+    imageIdsLength: imageIds.length,
+    hasViewport: !!viewport,
+    hasRenderingEngine: !!renderingEngine,
+    viewMode,
+    currentImageIndex,
+    isValidImageIndex: currentImageIndex >= 0 && currentImageIndex < imageIds.length
+  };
+
+  console.log('🔍 Image loading useEffect triggered:', conditions);
+
+  if (isInitialized && imageIds.length > 0 && viewMode === '2d' && viewport && renderingEngine && conditions.isValidImageIndex) {
+    console.log('✅ All conditions met for 2D, calling loadImage with index:', currentImageIndex);
+    loadImage(currentImageIndex);
+  } else if (isInitialized && imageIds.length > 0 && (viewMode === '3d' || viewMode === 'vr')) {
+    console.log('🔧 3D/VR mode - would load volume data here');
+    // TODO: Implement 3D volume loading
+    // This would involve loading all slices and creating a 3D volume
+  } else {
+    const missingConditions = [];
+    if (!isInitialized) missingConditions.push('not initialized');
+    if (imageIds.length === 0) missingConditions.push('no image IDs');
+    if (!viewport && viewMode === '2d') missingConditions.push('no viewport');
+    if (!renderingEngine && viewMode === '2d') missingConditions.push('no rendering engine');
+    if (viewMode === '2d' && !conditions.isValidImageIndex) missingConditions.push(`invalid image index: ${currentImageIndex}`);
     
-    console.log('🔍 Image loading useEffect triggered:', conditions);
+    console.log('⏳ Image loading conditions not met:', missingConditions.join(', '));
+
+    if (missingConditions.length > 0 && !missingConditions.includes('no image IDs')) {
+      setError(null);
+    }
+  }
+}, [isInitialized, imageIds, currentImageIndex, viewMode, loadImage, viewport, renderingEngine]);
+
+// Add this new useEffect to handle view mode changes
+useEffect(() => {
+  console.log('🔄 View mode changed to:', viewMode);
+  
+  // Reset initialization when view mode changes
+  if (isInitialized) {
+    console.log('🔄 Resetting initialization due to view mode change');
     
-    if (isInitialized && imageIds.length > 0 && viewport && renderingEngine && viewMode === '2d' && conditions.isValidImageIndex) {
-      console.log('✅ All conditions met, calling loadImage with index:', currentImageIndex);
-      loadImage(currentImageIndex);
-    } else {
-      const missingConditions = [];
-      if (!isInitialized) missingConditions.push('not initialized');
-      if (imageIds.length === 0) missingConditions.push('no image IDs');
-      if (!viewport) missingConditions.push('no viewport');
-      if (!renderingEngine) missingConditions.push('no rendering engine');
-      if (viewMode !== '2d') missingConditions.push(`view mode is ${viewMode}, not 2d`);
-      if (!conditions.isValidImageIndex) missingConditions.push(`invalid image index: ${currentImageIndex}`);
-      
-      console.log('⏳ Image loading conditions not met:', missingConditions.join(', '));
-      
-      // Clear error if we're just waiting for initialization
-      if (missingConditions.length > 0 && !missingConditions.includes('no image IDs')) {
-        setError(null);
+    // Cleanup existing state
+    if (renderingEngine) {
+      try {
+        renderingEngine.destroy();
+        console.log('✅ Previous rendering engine destroyed');
+      } catch (err) {
+        console.warn('⚠️ Error destroying rendering engine:', err);
       }
     }
-  }, [isInitialized, imageIds, currentImageIndex, viewMode, loadImage, viewport, renderingEngine]);
+    
+    if (toolGroup) {
+      try {
+        ToolGroupManager.destroyToolGroup(toolGroup.id as string);
+        console.log('✅ Previous tool group destroyed');
+      } catch (err) {
+        console.warn('⚠️ Error destroying tool group:', err);
+      }
+    }
+    
+    // Reset all state
+    setIsInitialized(false);
+    setRenderingEngine(null);
+    setViewport(null);
+    setToolGroup(null);
+    setError(null);
+    setInitializationAttempts(0);
+    
+    console.log('✅ State reset complete, will re-initialize');
+  }
+}, [viewMode]); // Only depend on viewMode
+
 
   useEffect(() => {
     if (viewMode === '3d' || viewMode === 'vr') {
@@ -1435,6 +1500,363 @@ export default function DicomViewer() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, [viewport, renderingEngine, debouncedRender]);
+
+  // Create volume from DICOM slices
+const createVolumeFromDICOM = useCallback(async (imageIds: string[]) => {
+  console.log('🔧 Creating volume from', imageIds.length, 'DICOM slices...');
+  
+  try {
+    const images = [];
+    const maxSlices = Math.min(imageIds.length, 15);
+    
+    for (let i = 0; i < maxSlices; i++) {
+      console.log(`📊 Loading slice ${i + 1}/${maxSlices}`);
+      try {
+        const image = await imageLoader.loadAndCacheImage(imageIds[i]);
+        images.push(image);
+      } catch (error) {
+        console.warn(`⚠️ Failed to load slice ${i + 1}:`, error);
+      }
+    }
+
+    if (images.length === 0) {
+      throw new Error('No images loaded successfully');
+    }
+
+    console.log(`✅ Successfully loaded ${images.length} images`);
+
+    // Get image dimensions
+    const firstImage = images[0] as any;
+    const originalWidth = firstImage.width || 512;
+    const originalHeight = firstImage.height || 512;
+    const depth = images.length;
+    
+    // Use reasonable dimensions (no scaling for now to avoid issues)
+    const width = Math.min(originalWidth, 512);
+    const height = Math.min(originalHeight, 512);
+    
+    console.log(`📏 Volume dimensions: ${width}x${height}x${depth}`);
+
+    // Create volume array
+    const volumeArray = new Uint16Array(width * height * depth);
+
+    // Process each slice
+    for (let sliceIndex = 0; sliceIndex < images.length; sliceIndex++) {
+      const image = images[sliceIndex] as any;
+      const pixelData = image.getPixelData?.();
+      
+      if (!pixelData) {
+        console.warn(`⚠️ No pixel data for slice ${sliceIndex}`);
+        continue;
+      }
+
+      // Copy pixel data
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const sourceIndex = y * originalWidth + x;
+          const targetIndex = sliceIndex * width * height + y * width + x;
+          
+          if (sourceIndex < pixelData.length && targetIndex < volumeArray.length) {
+            volumeArray[targetIndex] = pixelData[sourceIndex] || 0;
+          }
+        }
+      }
+    }
+
+    console.log(`✅ Volume data array created: ${volumeArray.length} voxels`);
+
+    // Find data range
+    let minValue = Infinity;
+    let maxValue = -Infinity;
+    for (let i = 0; i < volumeArray.length; i++) {
+      const value = volumeArray[i];
+      if (value < minValue) minValue = value;
+      if (value > maxValue) maxValue = value;
+    }
+
+    console.log(`📊 Data range: ${minValue} - ${maxValue}`);
+
+    // Create VTK ImageData with PROPER configuration - FIXED VARIABLE NAME
+    const volumeImageData = vtkImageData.newInstance();  // ✅ Changed variable name
+    
+    // Set dimensions FIRST
+    volumeImageData.setDimensions([width, height, depth]);
+    
+    // Set proper spacing and origin
+    volumeImageData.setSpacing([1.0, 1.0, 2.0]);
+    volumeImageData.setOrigin([0, 0, 0]);
+
+    // Create and set scalars
+    const scalars = vtkDataArray.newInstance({
+      name: 'Scalars',
+      values: volumeArray,
+      dataType: VtkDataTypes.UNSIGNED_SHORT,
+      numberOfComponents: 1,
+    });
+
+    volumeImageData.getPointData().setScalars(scalars);
+    
+    console.log('✅ VTK ImageData created successfully');
+    console.log('📊 VTK ImageData info:', {
+      dimensions: volumeImageData.getDimensions(),
+      spacing: volumeImageData.getSpacing(),
+      bounds: volumeImageData.getBounds()
+    });
+
+    return {
+      imageData: volumeImageData,  // ✅ Use the renamed variable
+      dataRange: [minValue, maxValue],
+      dimensions: [width, height, depth]
+    };
+
+  } catch (error) {
+    console.error('❌ Error creating volume from DICOM:', error);
+    return null;
+  }
+}, [imageLoader]);
+
+
+
+
+const initializeSimple3DPreview = useCallback(async () => {
+  console.log('🔧 Initializing simple 3D preview fallback...');
+  
+  try {
+    if (!vtkContainerRef.current) {
+      throw new Error('VTK container ref not available');
+    }
+    
+    // Clear container
+    vtkContainerRef.current.innerHTML = '';
+    
+    // Create a simple preview div
+    const previewDiv = document.createElement('div');
+    previewDiv.style.cssText = `
+      width: 100%;
+      height: 100%;
+      min-height: 400px;
+      background: linear-gradient(45deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-align: center;
+      border-radius: 8px;
+      border: 2px solid #3b82f6;
+    `;
+    
+    previewDiv.innerHTML = `
+      <div style="font-size: 48px; margin-bottom: 20px;">🧠</div>
+      <h2 style="color: #60a5fa; margin-bottom: 10px;">3D Brain Volume Preview</h2>
+      <div style="color: #94a3b8; margin-bottom: 20px;">
+        <p>📊 Volume: ${imageIds.length} DICOM slices</p>
+        <p>🏥 Modality: ${study?.modality}</p>
+        <p>🧬 Body Part: ${study?.body_part}</p>
+      </div>
+      <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; margin-top: 20px;">
+        <p style="color: #fbbf24; margin-bottom: 10px;">⚠️ WebGL Issues Detected</p>
+        <p style="color: #d1d5db; font-size: 14px;">
+          VTK.js encountered WebGL texture errors.<br>
+          This preview shows your 3D data is ready.<br>
+          Try refreshing the page or check WebGL support.
+        </p>
+      </div>
+      <button onclick="window.location.reload()" style="
+        margin-top: 20px;
+        padding: 10px 20px;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      ">🔄 Refresh Page</button>
+    `;
+    
+    vtkContainerRef.current.appendChild(previewDiv);
+    
+    console.log('✅ Simple 3D preview initialized');
+    
+  } catch (error) {
+    console.error('❌ Error initializing simple 3D preview:', error);
+  }
+}, [imageIds, study]);
+
+
+
+// Initialize VTK.js 3D rendering
+// Initialize VTK.js 3D rendering
+const initialize3DRendering = useCallback(async () => {
+  console.log('🔧 Initializing VTK.js 3D rendering...');
+  
+  try {
+    if (!vtkContainerRef.current) {
+      throw new Error('VTK container ref not available');
+    }
+
+    // Clear container
+    vtkContainerRef.current.innerHTML = '';
+
+    const fullScreenRenderer = vtkFullScreenRenderWindow.newInstance({
+      rootContainer: vtkContainerRef.current,
+      containerStyle: {
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        minHeight: '400px'
+      }
+    });
+
+    const renderer = fullScreenRenderer.getRenderer();
+    const renderWindow = fullScreenRenderer.getRenderWindow();
+
+    renderer.setBackground(0.1, 0.1, 0.2);
+    console.log('✅ VTK render window created');
+
+    if (imageIds.length > 0) {
+      const volumeResult = await createVolumeFromDICOM(imageIds);
+      
+      if (volumeResult && volumeResult.imageData) {
+        const { imageData: volumeImageData, dataRange, dimensions } = volumeResult;  // ✅ Renamed here too
+        
+        console.log('📊 Volume info:', { dataRange, dimensions });
+        console.log('📊 VTK bounds:', volumeImageData.getBounds());
+
+        // Create volume mapper
+        const volumeMapper = vtkVolumeMapper.newInstance();
+        volumeMapper.setInputData(volumeImageData);  // ✅ Use renamed variable
+        volumeMapper.setSampleDistance(1.0);
+
+        const volumeActor = vtkVolume.newInstance();
+        volumeActor.setMapper(volumeMapper);
+
+        const volumeProperty = vtkVolumeProperty.newInstance();
+
+        // Create color transfer function
+        const colorTransferFunction = vtkColorTransferFunction.newInstance();
+        const range = dataRange[1] - dataRange[0];
+        
+        if (range > 0) {
+          colorTransferFunction.addRGBPoint(dataRange[0], 0.0, 0.0, 0.0);
+          colorTransferFunction.addRGBPoint(dataRange[0] + range * 0.3, 0.3, 0.3, 0.4);
+          colorTransferFunction.addRGBPoint(dataRange[0] + range * 0.6, 0.6, 0.6, 0.7);
+          colorTransferFunction.addRGBPoint(dataRange[1], 1.0, 1.0, 1.0);
+        } else {
+          colorTransferFunction.addRGBPoint(dataRange[0], 0.0, 0.0, 0.0);
+          colorTransferFunction.addRGBPoint(dataRange[1], 1.0, 1.0, 1.0);
+        }
+
+        // Create opacity transfer function
+        const opacityTransferFunction = vtkPiecewiseFunction.newInstance();
+        if (range > 0) {
+          opacityTransferFunction.addPoint(dataRange[0], 0.0);
+          opacityTransferFunction.addPoint(dataRange[0] + range * 0.2, 0.0);
+          opacityTransferFunction.addPoint(dataRange[0] + range * 0.4, 0.1);
+          opacityTransferFunction.addPoint(dataRange[0] + range * 0.8, 0.4);
+          opacityTransferFunction.addPoint(dataRange[1], 0.8);
+        } else {
+          opacityTransferFunction.addPoint(dataRange[0], 0.0);
+          opacityTransferFunction.addPoint(dataRange[1], 0.5);
+        }
+
+        volumeProperty.setRGBTransferFunction(0, colorTransferFunction);
+        volumeProperty.setScalarOpacity(0, opacityTransferFunction);
+        volumeProperty.setInterpolationTypeToLinear();
+
+        volumeActor.setProperty(volumeProperty);
+        renderer.addVolume(volumeActor);
+
+        console.log('✅ Volume added to renderer');
+
+        // Get PROPER bounds from the volume
+        const bounds = volumeImageData.getBounds();  // ✅ Use renamed variable
+        console.log('📊 Corrected bounds:', bounds);
+
+        if (bounds && bounds.length === 6) {
+          const center = [
+            (bounds[0] + bounds[1]) / 2,
+            (bounds[2] + bounds[3]) / 2,
+            (bounds[4] + bounds[5]) / 2
+          ];
+
+          const maxDim = Math.max(
+            bounds[1] - bounds[0], 
+            bounds[3] - bounds[2], 
+            bounds[5] - bounds[4]
+          );
+
+          // Reset camera and position it properly
+          renderer.resetCamera();
+          const camera = renderer.getActiveCamera();
+          
+          // Position camera outside the volume
+          camera.setPosition(
+            center[0] + maxDim * 1.5,
+            center[1] - maxDim * 1.0,
+            center[2] + maxDim * 1.2
+          );
+          camera.setFocalPoint(center[0], center[1], center[2]);
+          camera.setViewUp(0, 0, 1);
+          
+          // Better viewing angle for medical data
+          camera.elevation(20);
+          camera.azimuth(30);
+          camera.roll(0);
+          
+          renderer.resetCameraClippingRange();
+
+          console.log('📊 Final camera info:', {
+            position: camera.getPosition(),
+            focalPoint: camera.getFocalPoint(),
+            viewUp: camera.getViewUp(),
+            center: center,
+            maxDim: maxDim
+          });
+        }
+
+        // Store references
+        setVtkRenderWindow(renderWindow);
+        setVtkRenderer(renderer);
+        setVtkVolumeActor(volumeActor);
+        setVolumeData(volumeImageData);  // ✅ Use renamed variable
+
+        // Render with error handling
+        try {
+          renderWindow.render();
+          console.log('✅ Initial render completed successfully');
+        } catch (renderError) {
+          console.error('❌ Render error:', renderError);
+          // Fallback: try with simpler settings
+          setTimeout(() => {
+            try {
+              renderWindow.render();
+              console.log('✅ Retry render completed');
+            } catch (retryError) {
+              console.error('❌ Retry render failed:', retryError);
+            }
+          }, 100);
+        }
+
+        console.log('✅ 3D volume rendering initialized successfully');
+      } else {
+        throw new Error('Failed to create volume data from DICOM slices');
+      }
+    } else {
+      throw new Error('No image IDs available for 3D reconstruction');
+    }
+
+  } catch (error) {
+    console.error('❌ Error initializing 3D rendering:', error);
+    setError('Failed to initialize 3D rendering: ' + error.message);
+    throw error;
+  }
+}, [imageIds, createVolumeFromDICOM]);
+
+
+
+
+
 
   const handleToolSelect = (tool: string) => {
     if (!toolGroup) return;
@@ -2453,14 +2875,37 @@ endsolid ${study.patient_name}_3D_Model
               )}
               
               {/* 3D VTK Viewer */}
-              {(viewMode === '3d' || viewMode === 'vr') && (
-                <div 
-                  ref={vtkContainerRef}
-                  className="w-full h-full"
-                  style={{ minHeight: '400px' }}
-                />
-              )}
-              
+              {/* 3D VTK Viewer */}
+{/* Enhanced 3D VTK Viewer */}
+{/* 3D VTK Viewer */}
+{(viewMode === '3d' || viewMode === 'vr') && (
+  <div className="w-full h-full relative" style={{ minHeight: '400px' }}>
+    <div 
+      ref={vtkContainerRef}
+      className="w-full h-full"
+      style={{ 
+        minHeight: '400px',
+        background: 'radial-gradient(circle, #1a1a2e 0%, #16213e 50%, #0f3460 100%)'
+      }}
+    />
+    
+    {!isInitialized && (
+      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+        <div className="bg-gray-800 text-white p-6 rounded-lg text-center border border-blue-500">
+          <div className="text-3xl mb-4">🧠</div>
+          <h3 className="text-xl font-bold mb-4 text-blue-300">Initializing 3D Brain Visualization</h3>
+          <div className="space-y-2 text-sm text-gray-300">
+            <div>Loading {imageIds.length} DICOM slices...</div>
+            <div className="animate-pulse">Setting up VTK.js volume rendering...</div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
+
+
+
               {/* MPR Views */}
               {viewMode === 'mpr' && (
                 <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-1">

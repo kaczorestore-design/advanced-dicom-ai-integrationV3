@@ -209,6 +209,7 @@ class Annotation(AnnotationBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    expires_in: Optional[int] = None  # Add this field
 
 
 class LoginRequest(BaseModel):
